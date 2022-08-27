@@ -8,14 +8,24 @@
 #include <pwd.h>
 #include <grp.h>
 #include <ctime>
+#include <termios.h>
 
 using namespace std;
 
+string systemUserName;
 vector<vector<string>> dirInfo; // For Storing directory info (including sub-directory & Files)
+struct termios original_termios; // Store original state of terminal
+bool cmd_mode = false; // set to True if command mode is on, else false
 
 // Clears the Screen.
 void clearScreen() {
     cout << "\033[H\033[2J\033[3J"; // ANSI escape Sequence to clear screen.
+}
+
+// Prints the Error & Exit from the Programme
+void printError(string s) {
+  cout << "Error : " << s << "\r\n";
+  exit(1);
 }
 
 // Convert Seconds into date/time;
@@ -51,7 +61,12 @@ string convertSize(unsigned long int fileSize) {
     return convertedSize;
 }
 
-// for fetching File Info stats like (fileSize , username, groupname, last modified date, file permission)
+// Fetching Current System User, and storing it in global variable systemUserName
+void getSystemUserName() {
+    systemUserName = getpwuid(getuid())->pw_name;
+}
+
+// for fetching File Info stats like git status(fileSize , username, groupname, last modified date, file permission)
 vector<string> getFileInfo(string fileName, string filePath) {
     vector<string> fileInfo;
 
@@ -129,23 +144,123 @@ void printDirInfo(string path) {
     for(int dirIndex = 0 ; dirIndex < dirInfo.size() ; dirIndex++) {
         vector<string> fileInfo = dirInfo[dirIndex];
         // if(dirIndex==0) cout<<"\033[21;35m";
-        cout << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\n";
+        cout << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
         // if(dirIndex==0) cout<<"\033[0m";
     }
 }
 
+// Enables Raw Mode (Canonical Mode)
+void disableRawMode() {
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios) == -1) printError("tcgetattr");
+}
+
+// Enables Raw Mode (Non-Canonical Mode)
+void enableRawMode() {
+    // tcflag_t c_iflag;		/* input mode flags */
+    // tcflag_t c_oflag;		/* output mode flags */
+    // tcflag_t c_cflag;		/* control mode flags */
+    // tcflag_t c_lflag;		/* local mode flags */
+    // cc_t c_line;			/* line discipline */
+    // cc_t c_cc[NCCS];		/* control characters */
+    // speed_t c_ispeed;		/* input speed */
+    // speed_t c_ospeed;		/* output speed */
+    if(tcgetattr(STDIN_FILENO, &original_termios) == -1) printError("tcgetattr");
+    atexit(disableRawMode);
+
+    struct termios raw_termios = original_termios;
+    raw_termios.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw_termios.c_oflag &= ~(OPOST);
+    raw_termios.c_cflag |= (CS8);
+    raw_termios.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_termios) == -1) printError("tcsetattr");;
+}
+
+// Handle Escape Key
+int readEscape() {
+    char finalChar = '\0';
+    char ch1;
+    read(STDIN_FILENO, &ch1, 1);
+    if(ch1 == 27) return readEscape();
+    if(ch1 == 91) {
+        char ch2;
+        read(STDIN_FILENO, &ch2, 1);
+        if(ch2 == 27) return readEscape();
+        else if(ch2 == 'A' || ch2 == 'B' || ch2 == 'C' || ch2 == 'D') return ch2;
+    }
+    else if(ch1 == 'h' || ch1 == 'q' || ch1 == ':' || ch1 == 127 || ch1 == 13) return ch1;
+    return -1;
+}
+
+void handleKeyPressesInNormalMode() {
+    while(true) {
+        char finalChar = '\0';
+        char ch;
+        read(STDIN_FILENO, &ch, 1);
+        if(ch == 'h' || ch == 'q' || ch == ':' || ch == 127 || ch == 13) {
+            finalChar = ch;
+        }
+        else if (ch == 27) {
+            char tempChar = readEscape();
+            if(tempChar != -1) finalChar = tempChar;
+        }
+
+        if(finalChar == 'q') {
+            clearScreen();
+            // cout << "Thanks for using File Explorer.\r\n";
+            exit(1);
+        }
+        else if(finalChar == 'h') {
+            cout << "Home\r\n";
+        }
+        else if(finalChar == 127) {
+            cout << "BackSpace\r\n";
+        }
+        else if(finalChar == 13) {
+            cout << "Enter\r\n";
+        }
+        else if(finalChar == 'A') {
+            cout << "Up\r\n";
+        }
+        else if(finalChar == 'B') {
+            cout << "Down\r\n";
+        }
+        else if(finalChar == 'C') {
+            cout << "Right\r\n";
+        }
+        else if(finalChar == 'D') {
+            cout << "Left\r\n";
+        }
+    }
+}
 
 void testCode() {
-
+    
+    // cout << "Hi\n";
+    // for(int i = 0; i < 10 ; i++) 
+    // cout << editorReadKey() << "\r\n";
+    // return;
+    // char c;
+    // while (read(STDIN_FILENO, &c, 1) == 1 && c!='q') {
+    //     // if(c=='b' || c == 'e') printError("nikal");
+    //     if (iscntrl(c)) {
+    //         cout << (int)c << "\r\n";
+    //     } 
+    //     else {
+    //         cout << (int)c << " - " << c << "\r\n";
+    //     }
+    // }
 }
 
 int main(int argc, char **argv)
 {
+    // enableRawMode();
     // testCode();
+    // handleKeyPressesInNormalMode();
+
+    getSystemUserName();
     // cout << "\033[7m" << "Mayank Gupta" << "\n";
-    
-    // printDirInfo("../");
-    printDirInfo("/home/mayank/Desktop/");
+    // printDirInfo("./");
+    // printDirInfo("/home/mayank/Desktop/");
     
     // getDirectoryInfo("./");
     
