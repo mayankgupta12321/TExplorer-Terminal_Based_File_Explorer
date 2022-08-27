@@ -13,6 +13,11 @@ using namespace std;
 
 vector<vector<string>> dirInfo; // For Storing directory info (including sub-directory & Files)
 
+// Clears the Screen.
+void clearScreen() {
+    cout << "\033[H\033[2J\033[3J"; // ANSI escape Sequence to clear screen.
+}
+
 // Convert Seconds into date/time;
 string GetTimeAndDate(unsigned long long sec) {
     char date[100];
@@ -46,6 +51,7 @@ string convertSize(unsigned long int fileSize) {
     return convertedSize;
 }
 
+// for fetching File Info stats like (fileSize , username, groupname, last modified date, file permission)
 vector<string> getFileInfo(string fileName, string filePath) {
     vector<string> fileInfo;
 
@@ -60,8 +66,6 @@ vector<string> getFileInfo(string fileName, string filePath) {
     string fileSize = convertSize(fileStat.st_size);
     string fileUserName = getpwuid(fileStat.st_uid)->pw_name;
     string fileGroupName = getgrgid(fileStat.st_gid)->gr_name;
-    
-    cout << fileSize <<"\t";
 
     string filePermission = ""; // To store permission 
     filePermission += (S_ISDIR(fileStat.st_mode)) ? 'd' : '-'; // If directory than 'd', else '-'
@@ -120,10 +124,13 @@ void getDirectoryInfo(string path) {
 }   
   
 void printDirInfo(string path) {
+    clearScreen(); //Clearing the Screen before Printing.
     getDirectoryInfo(path);
     for(int dirIndex = 0 ; dirIndex < dirInfo.size() ; dirIndex++) {
         vector<string> fileInfo = dirInfo[dirIndex];
+        // if(dirIndex==0) cout<<"\033[21;35m";
         cout << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\n";
+        // if(dirIndex==0) cout<<"\033[0m";
     }
 }
 
@@ -135,8 +142,11 @@ void testCode() {
 int main(int argc, char **argv)
 {
     // testCode();
-    printDirInfo("/");
-        
+    // cout << "\033[7m" << "Mayank Gupta" << "\n";
+    
+    // printDirInfo("../");
+    printDirInfo("/home/mayank/Desktop/");
+    
     // getDirectoryInfo("./");
     
     return 0;
