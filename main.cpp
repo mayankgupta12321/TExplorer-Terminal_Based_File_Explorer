@@ -10,12 +10,19 @@
 #include <ctime>
 #include <termios.h>
 
+#define cursorSelected "==>"
+#define cursorUnselected "   "
+
 using namespace std;
 
-string systemUserName;
+string homeDirectory;
+string currentWorkingDirectory;
 vector<vector<string>> dirInfo; // For Storing directory info (including sub-directory & Files)
 struct termios original_termios; // Store original state of terminal
 bool cmd_mode = false; // set to True if command mode is on, else false
+int rowIndex = 0; // cursor pointing to this index.
+stack<string> backwardStack;
+stack<string> forwardStack;
 
 // Clears the Screen.
 void clearScreen() {
@@ -61,9 +68,16 @@ string convertSize(unsigned long int fileSize) {
     return convertedSize;
 }
 
+// Check If given path is a directory
+bool isDirectory(string path) {
+    struct stat fileStat;
+    stat(path.c_str(),&fileStat);
+    return S_ISDIR(fileStat.st_mode);
+}
+
 // Fetching Current System User, and storing it in global variable systemUserName
-void getSystemUserName() {
-    systemUserName = getpwuid(getuid())->pw_name;
+void getHomeDirectory() {
+    homeDirectory = "/home/" + (string)getpwuid(getuid())->pw_name + "/";
 }
 
 // for fetching File Info stats like git status(fileSize , username, groupname, last modified date, file permission)
@@ -137,13 +151,52 @@ void getDirectoryInfo(string path) {
     }
   
 }   
-  
+
+// Returns Parent Directory
+string getParentDirectory(string path) {
+    vector<string> strArr;
+    stringstream ss (path);
+    string item;
+    while (getline (ss, item, '/')) {
+        if(item == "") continue;
+        strArr.push_back (item);
+    }
+    if(strArr.size() == 0 || strArr.size() == 1) {
+        return "/";
+    }
+    else {
+        string newDirectory = "/";
+        for(int i = 0 ; i < strArr.size() - 1 ; i++) {
+            newDirectory += strArr[i] + "/";
+        }
+        return newDirectory;
+    }
+    // cout << newDirectory << endl;
+    // return "";
+}
+
+// Opens the file in default editor
+void openFile(string filePath) {
+    const char *file_or_url = filePath.c_str();
+    pid_t pid = fork();
+    if(pid == 0) {
+        // execv("xdg-open", , (char *)0);
+        cout << execlp("xdg-open", "xdg-open", file_or_url, (char *)0) << endl;
+        // execl("/usr/bin/xdg-open", "xdg-open", filePath.c_str());
+        // exec("xdg-open explorer.cpp");
+        // cout << "Child Created" << endl;
+    }
+}
+
+// Print Directory Info
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
     getDirectoryInfo(path);
     for(int dirIndex = 0 ; dirIndex < dirInfo.size() ; dirIndex++) {
         vector<string> fileInfo = dirInfo[dirIndex];
         // if(dirIndex==0) cout<<"\033[21;35m";
+        if(dirIndex == rowIndex) cout << cursorSelected << " ";
+        else cout << cursorUnselected << " ";
         cout << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
         // if(dirIndex==0) cout<<"\033[0m";
     }
@@ -204,25 +257,59 @@ void handleKeyPressesInNormalMode() {
             if(tempChar != -1) finalChar = tempChar;
         }
 
-        if(finalChar == 'q') {
+        // Quit - Close the Application
+        if(finalChar == 'q') { 
             clearScreen();
             // cout << "Thanks for using File Explorer.\r\n";
             exit(1);
         }
+        // h - Open Home Directory.
         else if(finalChar == 'h') {
-            cout << "Home\r\n";
+            rowIndex = 0;
+            currentWorkingDirectory = homeDirectory;
+            printDirInfo(currentWorkingDirectory);
+            // cout << "Home\r\n";
         }
+        // Beckspace - Going to Parent Directory
         else if(finalChar == 127) {
-            cout << "BackSpace\r\n";
+            string newDirectory = getParentDirectory(currentWorkingDirectory);
+            rowIndex = 0;
+            currentWorkingDirectory = newDirectory;
+            printDirInfo(currentWorkingDirectory);
+            // cout << "BackSpace\r\n";
         }
+        // Enter - Open the Directory/File
         else if(finalChar == 13) {
-            cout << "Enter\r\n";
+            // cout << fileName;
+            if(dirInfo[rowIndex][0] == ".") {}
+            else if (dirInfo[rowIndex][0] == "..") {
+                string newDirectory = getParentDirectory(currentWorkingDirectory);
+                rowIndex = 0;
+                currentWorkingDirectory = newDirectory;
+                printDirInfo(currentWorkingDirectory);
+            }
+            else if(isDirectory(dirInfo[rowIndex][1] + dirInfo[rowIndex][0])) {
+                string newDirectory = dirInfo[rowIndex][1] + dirInfo[rowIndex][0] + "/";
+                rowIndex = 0;
+                currentWorkingDirectory = newDirectory;
+                printDirInfo(currentWorkingDirectory);
+            }
+            else {
+                openFile(dirInfo[rowIndex][1] + dirInfo[rowIndex][0]);
+                // cout << dirInfo[rowIndex][1] + dirInfo[rowIndex][0] << "\n";
+            }
+            // cout << "Enter\r\n";
         }
+        // Up Key - Scroll Up
         else if(finalChar == 'A') {
-            cout << "Up\r\n";
+            if(rowIndex > 0) rowIndex--;
+            printDirInfo(currentWorkingDirectory);
+            // cout << "Up\r\n";
         }
+        // Down Key - Scroll Down
         else if(finalChar == 'B') {
-            cout << "Down\r\n";
+            if(rowIndex < dirInfo.size() - 1) rowIndex++;
+            printDirInfo(currentWorkingDirectory);
         }
         else if(finalChar == 'C') {
             cout << "Right\r\n";
@@ -253,14 +340,24 @@ void testCode() {
 
 int main(int argc, char **argv)
 {
-    // enableRawMode();
     // testCode();
-    // handleKeyPressesInNormalMode();
+    
+    getHomeDirectory();
+    currentWorkingDirectory = homeDirectory;
+    enableRawMode();
+    printDirInfo(currentWorkingDirectory);
+    handleKeyPressesInNormalMode();
 
-    getSystemUserName();
+    // openFile("/home/mayank/Desktop/vector.cpp");
+
+    // printDirInfo("../");
+
+    // cout << isDirectory("/") << endl;
+    // printDirInfo("/home/mayank/Desktop/");
+    // cout << homeDirectory << endl;
     // cout << "\033[7m" << "Mayank Gupta" << "\n";
     // printDirInfo("./");
-    // printDirInfo("/home/mayank/Desktop/");
+    
     
     // getDirectoryInfo("./");
     
