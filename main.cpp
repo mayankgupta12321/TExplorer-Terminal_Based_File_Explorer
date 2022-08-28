@@ -9,6 +9,10 @@
 #include <grp.h>
 #include <ctime>
 #include <termios.h>
+#include <sys/ioctl.h>
+#include <signal.h>
+
+#define maxRowsInNormalMode (windowStartIndex + windowRows - 4)
 
 #define cursorSelected "==>"
 #define cursorUnselected "   "
@@ -20,9 +24,13 @@ string currentWorkingDirectory;
 vector<vector<string>> dirInfo; // For Storing directory info (including sub-directory & Files)
 struct termios original_termios; // Store original state of terminal
 bool normalMode = true; // set to True if normal mode is on, else false
-int rowIndex = 0; // cursor pointing to this index.
+
 stack<string> backwardStack;
 stack<string> forwardStack;
+int windowRows, windowCols; // Terminal size
+int windowStartIndex = 0; // First Line of Terminal 
+int rowIndex = 0; // cursor pointing to this index.
+
 
 // Clears Forward Stack
 void clearForwardStack() {
@@ -184,14 +192,10 @@ string getParentDirectory(string path) {
 
 // Opens the file in default editor
 void openFile(string filePath) {
-    const char *file_or_url = filePath.c_str();
+    const char *fileName = filePath.c_str();
     pid_t pid = fork();
     if(pid == 0) {
-        // execv("xdg-open", , (char *)0);
-        execlp("xdg-open", "xdg-open", file_or_url, (char *)0);
-        // execl("/usr/bin/xdg-open", "xdg-open", filePath.c_str());
-        // exec("xdg-open explorer.cpp");
-        // cout << "Child Created" << endl;
+        execlp("xdg-open", "xdg-open", fileName, (char *)0);
     }
 }
 
@@ -199,19 +203,41 @@ void openFile(string filePath) {
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
     getDirectoryInfo(path);
-    for(int dirIndex = 0 ; dirIndex < dirInfo.size() ; dirIndex++) {
+    // for(int dirIndex = 0 ; dirIndex < dirInfo.size() ; dirIndex++) {
+    //     vector<string> fileInfo = dirInfo[dirIndex];
+    //     // if(dirIndex==0) cout<<"\033[21;35m";
+    //     if(normalMode == true && dirIndex == rowIndex) {
+    //         // cout<<"\033[35m";
+    //         cout << cursorSelected << fileInfo[0] << "\r\n";
+    //         // cout << cursorSelected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
+    //         // cout<<"\033[0m";
+    //     }
+    //     else {
+    //         cout << cursorUnselected << fileInfo[0] << "\r\n";
+    //         // cout << cursorUnselected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t";
+    //         // if(fileInfo[5][0] == 'd') cout<<"\033[32m";
+    //         // else cout<<"\033[31m";
+    //         // cout << fileInfo[0] << "\r\n";
+    //         // cout<<"\033[0m";
+    //     }
+    //     // if(dirIndex==0) cout<<"\033[0m";
+    // }
+    // cout << windowStartIndex << " " << windowStartIndex + windowRows - 4 << endl;
+    for(int dirIndex = windowStartIndex ; dirIndex < dirInfo.size() && dirIndex < maxRowsInNormalMode; dirIndex++) {
         vector<string> fileInfo = dirInfo[dirIndex];
         // if(dirIndex==0) cout<<"\033[21;35m";
         if(normalMode == true && dirIndex == rowIndex) {
             // cout<<"\033[35m";
-            cout << cursorSelected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
+            cout << cursorSelected << fileInfo[0] << "\r\n";
+            // cout << cursorSelected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
             // cout<<"\033[0m";
         }
         else {
-            cout << cursorUnselected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t";
+            cout << cursorUnselected << fileInfo[0] << "\r\n";
+            // cout << cursorUnselected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t";
             // if(fileInfo[5][0] == 'd') cout<<"\033[32m";
             // else cout<<"\033[31m";
-            cout << fileInfo[0] << "\r\n";
+            // cout << fileInfo[0] << "\r\n";
             // cout<<"\033[0m";
         }
         // if(dirIndex==0) cout<<"\033[0m";
@@ -280,14 +306,17 @@ void handleKeyPressesInNormalMode() {
             // cout << "Thanks for using File Explorer.\r\n";
             exit(1);
         }
+        
         // : - Enter the Command Mode 
         else if(finalChar == ':') {
+            // normalMode = false;
             cout << "\033[31m" << "Command Mode is in Implementation Phase.\r\n" << "\033[0m";
         }
         
         // h - Open Home Directory.
         else if(finalChar == 'h') {
             rowIndex = 0;
+            windowStartIndex = 0;
             clearForwardStack();
             backwardStack.push(currentWorkingDirectory);
             currentWorkingDirectory = homeDirectory;
@@ -303,6 +332,7 @@ void handleKeyPressesInNormalMode() {
                 backwardStack.push(currentWorkingDirectory);
             }
             rowIndex = 0;
+            windowStartIndex = 0;
             currentWorkingDirectory = newDirectory;
             printDirInfo(currentWorkingDirectory);
             // cout << "BackSpace\r\n";
@@ -319,6 +349,7 @@ void handleKeyPressesInNormalMode() {
                     backwardStack.push(currentWorkingDirectory);
                 }
                 rowIndex = 0;
+                windowStartIndex = 0;
                 currentWorkingDirectory = newDirectory;
                 printDirInfo(currentWorkingDirectory);
             }
@@ -327,6 +358,7 @@ void handleKeyPressesInNormalMode() {
                 backwardStack.push(currentWorkingDirectory);
                 string newDirectory = dirInfo[rowIndex][1] + dirInfo[rowIndex][0] + "/";
                 rowIndex = 0;
+                windowStartIndex = 0;
                 currentWorkingDirectory = newDirectory;
                 printDirInfo(currentWorkingDirectory);
             }
@@ -339,12 +371,14 @@ void handleKeyPressesInNormalMode() {
         // Up Key - Scroll Up
         else if(finalChar == 'A') {
             if(rowIndex > 0) rowIndex--;
+            if(rowIndex < windowStartIndex) windowStartIndex--;
             printDirInfo(currentWorkingDirectory);
             // cout << "Up\r\n";
         }
         // Down Key - Scroll Down
         else if(finalChar == 'B') {
             if(rowIndex < dirInfo.size() - 1) rowIndex++;
+            if(rowIndex >= maxRowsInNormalMode) windowStartIndex++;
             printDirInfo(currentWorkingDirectory);
         }
 
@@ -370,28 +404,38 @@ void handleKeyPressesInNormalMode() {
     }
 }
 
+void myfun(int signal_num) {
+    // cout << "The interrupt signal is (" << signal_num << "). \n";
+    if (SIGWINCH == signal_num) {
+        struct winsize w;
+        ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+        cout << "Interrupt Generated : ";
+        printf ("lines %d --", w.ws_row);
+        printf ("columns %d\r\n", w.ws_col);
+    // printf("SIGWINCH raised, window size: %d rows / %d columns\n",
+    }
+}
+
 void testCode() {
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    cout << "Initial Size : \n";
+    printf ("lines %d --", w.ws_row);
+    printf ("columns %d\n", w.ws_col);
+    // windowRows = w.ws_row;
+    // windowCols = w.ws_col;
+    while(1);
     
-    // cout << "Hi\n";
-    // for(int i = 0; i < 10 ; i++) 
-    // cout << editorReadKey() << "\r\n";
-    // return;
-    // char c;
-    // while (read(STDIN_FILENO, &c, 1) == 1 && c!='q') {
-    //     // if(c=='b' || c == 'e') printError("nikal");
-    //     if (iscntrl(c)) {
-    //         cout << (int)c << "\r\n";
-    //     } 
-    //     else {
-    //         cout << (int)c << " - " << c << "\r\n";
-    //     }
-    // }
 }
 
 int main(int argc, char **argv)
 {
+    signal(SIGWINCH, myfun);
     // testCode();
-    
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    windowRows = w.ws_row;
+    windowCols = w.ws_col;
     getHomeDirectory();
     currentWorkingDirectory = get_current_dir_name();
     if(currentWorkingDirectory[currentWorkingDirectory.size() - 1] != '/') currentWorkingDirectory += '/';
@@ -399,8 +443,8 @@ int main(int argc, char **argv)
     printDirInfo(currentWorkingDirectory);
     handleKeyPressesInNormalMode();
 
-    // printDirInfo(currentWorkingDirectory);
 
+    // printDirInfo(currentWorkingDirectory);
     // cout << isDirectory("/") << endl;
     // printDirInfo("/home/mayank/Desktop/IIITH Courses/AOS/Assignment/Assignment1/2022201012/");
     // cout << homeDirectory << endl;
