@@ -19,10 +19,17 @@ string homeDirectory;
 string currentWorkingDirectory;
 vector<vector<string>> dirInfo; // For Storing directory info (including sub-directory & Files)
 struct termios original_termios; // Store original state of terminal
-bool cmd_mode = false; // set to True if command mode is on, else false
+bool normalMode = true; // set to True if normal mode is on, else false
 int rowIndex = 0; // cursor pointing to this index.
 stack<string> backwardStack;
 stack<string> forwardStack;
+
+// Clears Forward Stack
+void clearForwardStack() {
+    while (!forwardStack.empty()) {
+        forwardStack.pop();
+    }
+}
 
 // Clears the Screen.
 void clearScreen() {
@@ -181,7 +188,7 @@ void openFile(string filePath) {
     pid_t pid = fork();
     if(pid == 0) {
         // execv("xdg-open", , (char *)0);
-        cout << execlp("xdg-open", "xdg-open", file_or_url, (char *)0) << endl;
+        execlp("xdg-open", "xdg-open", file_or_url, (char *)0);
         // execl("/usr/bin/xdg-open", "xdg-open", filePath.c_str());
         // exec("xdg-open explorer.cpp");
         // cout << "Child Created" << endl;
@@ -195,9 +202,18 @@ void printDirInfo(string path) {
     for(int dirIndex = 0 ; dirIndex < dirInfo.size() ; dirIndex++) {
         vector<string> fileInfo = dirInfo[dirIndex];
         // if(dirIndex==0) cout<<"\033[21;35m";
-        if(dirIndex == rowIndex) cout << cursorSelected << " ";
-        else cout << cursorUnselected << " ";
-        cout << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
+        if(normalMode == true && dirIndex == rowIndex) {
+            // cout<<"\033[35m";
+            cout << cursorSelected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
+            // cout<<"\033[0m";
+        }
+        else {
+            cout << cursorUnselected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t";
+            // if(fileInfo[5][0] == 'd') cout<<"\033[32m";
+            // else cout<<"\033[31m";
+            cout << fileInfo[0] << "\r\n";
+            // cout<<"\033[0m";
+        }
         // if(dirIndex==0) cout<<"\033[0m";
     }
 }
@@ -252,6 +268,7 @@ void handleKeyPressesInNormalMode() {
         if(ch == 'h' || ch == 'q' || ch == ':' || ch == 127 || ch == 13) {
             finalChar = ch;
         }
+        // Escape Character
         else if (ch == 27) {
             char tempChar = readEscape();
             if(tempChar != -1) finalChar = tempChar;
@@ -263,32 +280,51 @@ void handleKeyPressesInNormalMode() {
             // cout << "Thanks for using File Explorer.\r\n";
             exit(1);
         }
+        // : - Enter the Command Mode 
+        else if(finalChar == ':') {
+            cout << "\033[31m" << "Command Mode is in Implementation Phase.\r\n" << "\033[0m";
+        }
+        
         // h - Open Home Directory.
         else if(finalChar == 'h') {
             rowIndex = 0;
+            clearForwardStack();
+            backwardStack.push(currentWorkingDirectory);
             currentWorkingDirectory = homeDirectory;
             printDirInfo(currentWorkingDirectory);
             // cout << "Home\r\n";
         }
+        
         // Beckspace - Going to Parent Directory
         else if(finalChar == 127) {
             string newDirectory = getParentDirectory(currentWorkingDirectory);
+            if(newDirectory != currentWorkingDirectory) {
+                clearForwardStack();
+                backwardStack.push(currentWorkingDirectory);
+            }
             rowIndex = 0;
             currentWorkingDirectory = newDirectory;
             printDirInfo(currentWorkingDirectory);
             // cout << "BackSpace\r\n";
         }
+        
         // Enter - Open the Directory/File
         else if(finalChar == 13) {
             // cout << fileName;
             if(dirInfo[rowIndex][0] == ".") {}
             else if (dirInfo[rowIndex][0] == "..") {
                 string newDirectory = getParentDirectory(currentWorkingDirectory);
+                if(newDirectory != currentWorkingDirectory) {
+                    clearForwardStack();
+                    backwardStack.push(currentWorkingDirectory);
+                }
                 rowIndex = 0;
                 currentWorkingDirectory = newDirectory;
                 printDirInfo(currentWorkingDirectory);
             }
             else if(isDirectory(dirInfo[rowIndex][1] + dirInfo[rowIndex][0])) {
+                clearForwardStack();
+                backwardStack.push(currentWorkingDirectory);
                 string newDirectory = dirInfo[rowIndex][1] + dirInfo[rowIndex][0] + "/";
                 rowIndex = 0;
                 currentWorkingDirectory = newDirectory;
@@ -296,10 +332,10 @@ void handleKeyPressesInNormalMode() {
             }
             else {
                 openFile(dirInfo[rowIndex][1] + dirInfo[rowIndex][0]);
-                // cout << dirInfo[rowIndex][1] + dirInfo[rowIndex][0] << "\n";
             }
             // cout << "Enter\r\n";
         }
+        
         // Up Key - Scroll Up
         else if(finalChar == 'A') {
             if(rowIndex > 0) rowIndex--;
@@ -311,11 +347,25 @@ void handleKeyPressesInNormalMode() {
             if(rowIndex < dirInfo.size() - 1) rowIndex++;
             printDirInfo(currentWorkingDirectory);
         }
+
+        // Right Key - For Next Directory
         else if(finalChar == 'C') {
-            cout << "Right\r\n";
+            if(!forwardStack.empty()) {
+                backwardStack.push(currentWorkingDirectory);
+                currentWorkingDirectory = forwardStack.top();
+                forwardStack.pop();
+                printDirInfo(currentWorkingDirectory);
+            }
         }
+
+        // Left Key - For Previous Visited Directory
         else if(finalChar == 'D') {
-            cout << "Left\r\n";
+            if(!backwardStack.empty()) {
+                forwardStack.push(currentWorkingDirectory);
+                currentWorkingDirectory = backwardStack.top();
+                backwardStack.pop();
+                printDirInfo(currentWorkingDirectory);
+            }
         }
     }
 }
@@ -343,17 +393,16 @@ int main(int argc, char **argv)
     // testCode();
     
     getHomeDirectory();
-    currentWorkingDirectory = homeDirectory;
+    currentWorkingDirectory = get_current_dir_name();
+    if(currentWorkingDirectory[currentWorkingDirectory.size() - 1] != '/') currentWorkingDirectory += '/';
     enableRawMode();
     printDirInfo(currentWorkingDirectory);
     handleKeyPressesInNormalMode();
 
-    // openFile("/home/mayank/Desktop/vector.cpp");
-
-    // printDirInfo("../");
+    // printDirInfo(currentWorkingDirectory);
 
     // cout << isDirectory("/") << endl;
-    // printDirInfo("/home/mayank/Desktop/");
+    // printDirInfo("/home/mayank/Desktop/IIITH Courses/AOS/Assignment/Assignment1/2022201012/");
     // cout << homeDirectory << endl;
     // cout << "\033[7m" << "Mayank Gupta" << "\n";
     // printDirInfo("./");
