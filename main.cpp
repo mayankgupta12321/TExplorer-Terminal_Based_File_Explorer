@@ -14,8 +14,9 @@
 
 #define maxRowsInNormalMode (windowStartIndex + windowRows - 4)
 
-#define cursorSelected "==>"
-#define cursorUnselected "   "
+// #define cursorSelected "==> "
+#define cursorSelected ">>> "
+#define cursorUnselected "    "
 
 using namespace std;
 
@@ -199,48 +200,71 @@ void openFile(string filePath) {
     }
 }
 
+// returns fileInfo in a string of size equals to window size
+string resizeFileInfo(vector<string> fileInfo) {
+    // FileName
+    string fileName = fileInfo[0];
+    while(fileName.size() < 25) {
+        fileName += ' ';
+    }
+    if(fileName.size() > 25) {
+        fileName = fileName.substr(0, 22) + "..."; 
+    }
+
+    // FileSize
+    string fileSize = fileInfo[2];
+    while(fileSize.size() < 7) {
+        fileSize = ' ' + fileSize;
+    }
+
+    // UserName
+    string userName = fileInfo[3];
+    while(userName.size() < 10) {
+        userName += ' ';
+    }
+    if(userName.size() > 10) {
+        userName = userName.substr(0, 7) + "..."; 
+    }
+
+    // GroupName
+    string groupName = fileInfo[4];
+    while(groupName.size() < 10) {
+        groupName += ' ';
+    }
+    if(groupName.size() > 10) {
+        groupName = groupName.substr(0, 7) + "..."; 
+    }
+
+    // File Permission
+    string filePermission = fileInfo[5];
+
+    // Last Modified Date
+    string lastModifiedDate = fileInfo[6];
+    
+    string resizedFileInfo = fileName + "   " + fileSize + "   " + userName + "   " + groupName + "   " + filePermission + "   " + lastModifiedDate;
+    resizedFileInfo = resizedFileInfo.substr(0,windowCols-5);
+
+    return resizedFileInfo;
+}
+
 // Print Directory Info
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
     getDirectoryInfo(path);
-    // for(int dirIndex = 0 ; dirIndex < dirInfo.size() ; dirIndex++) {
-    //     vector<string> fileInfo = dirInfo[dirIndex];
-    //     // if(dirIndex==0) cout<<"\033[21;35m";
-    //     if(normalMode == true && dirIndex == rowIndex) {
-    //         // cout<<"\033[35m";
-    //         cout << cursorSelected << fileInfo[0] << "\r\n";
-    //         // cout << cursorSelected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
-    //         // cout<<"\033[0m";
-    //     }
-    //     else {
-    //         cout << cursorUnselected << fileInfo[0] << "\r\n";
-    //         // cout << cursorUnselected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t";
-    //         // if(fileInfo[5][0] == 'd') cout<<"\033[32m";
-    //         // else cout<<"\033[31m";
-    //         // cout << fileInfo[0] << "\r\n";
-    //         // cout<<"\033[0m";
-    //     }
-    //     // if(dirIndex==0) cout<<"\033[0m";
-    // }
-    // cout << windowStartIndex << " " << windowStartIndex + windowRows - 4 << endl;
     for(int dirIndex = windowStartIndex ; dirIndex < dirInfo.size() && dirIndex < maxRowsInNormalMode; dirIndex++) {
         vector<string> fileInfo = dirInfo[dirIndex];
-        // if(dirIndex==0) cout<<"\033[21;35m";
         if(normalMode == true && dirIndex == rowIndex) {
             // cout<<"\033[35m";
-            cout << cursorSelected << fileInfo[0] << "\r\n";
-            // cout << cursorSelected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t" << fileInfo[0] << "\r\n";
+            cout << cursorSelected << resizeFileInfo(fileInfo) << "\r\n";
             // cout<<"\033[0m";
         }
         else {
-            cout << cursorUnselected << fileInfo[0] << "\r\n";
-            // cout << cursorUnselected << " " << fileInfo[1] << "\t" << fileInfo[2] << "\t" << fileInfo[3] << "\t" << fileInfo[4] << "\t" << fileInfo[5] << "\t" << fileInfo[6] << "\t";
+            cout << cursorUnselected << resizeFileInfo(fileInfo) << "\r\n";
             // if(fileInfo[5][0] == 'd') cout<<"\033[32m";
             // else cout<<"\033[31m";
             // cout << fileInfo[0] << "\r\n";
             // cout<<"\033[0m";
         }
-        // if(dirIndex==0) cout<<"\033[0m";
     }
 }
 
@@ -409,9 +433,17 @@ void myfun(int signal_num) {
     if (SIGWINCH == signal_num) {
         struct winsize w;
         ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-        cout << "Interrupt Generated : ";
-        printf ("lines %d --", w.ws_row);
-        printf ("columns %d\r\n", w.ws_col);
+        // if(rowIndex-1 >= maxRowsInNormalMode) windowStartIndex++;
+
+        if(w.ws_row < windowRows && rowIndex == maxRowsInNormalMode-1) windowStartIndex++;
+        if(w.ws_row > windowRows && windowStartIndex > 0) windowStartIndex--;
+        windowRows = w.ws_row;
+        windowCols = w.ws_col;
+        printDirInfo(currentWorkingDirectory);
+
+        // cout << "Interrupt Generated : ";
+        // printf ("lines %d --", w.ws_row);
+        // printf ("columns %d\r\n", w.ws_col);
     // printf("SIGWINCH raised, window size: %d rows / %d columns\n",
     }
 }
