@@ -1,3 +1,5 @@
+// Mayank Gupta - 2022201012 - OS1 - @IIIT Hyderabad
+
 #include <bits/stdc++.h>
 #include <stdio.h>
 #include <dirent.h>
@@ -12,7 +14,7 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 
-#define maxRowsInNormalMode (windowStartIndex + windowRows - 4)
+#define maxRowsInNormalMode (windowStartIndex + windowRows - 5)
 
 // #define cursorSelected "==> "
 #define cursorSelected ">>> "
@@ -26,12 +28,15 @@ vector<vector<string>> dirInfo; // For Storing directory info (including sub-dir
 struct termios original_termios; // Store original state of terminal
 bool normalMode = true; // set to True if normal mode is on, else false
 
-stack<string> backwardStack;
-stack<string> forwardStack;
+stack<string> backwardStack; // Maintains Backward History
+stack<string> forwardStack; // Maintains forward History
 int windowRows, windowCols; // Terminal size
 int windowStartIndex = 0; // First Line of Terminal 
 int rowIndex = 0; // cursor pointing to this index.
 
+string inputCommandString = "";
+
+void handleKeyPressesInCommandMode();
 
 // Clears Forward Stack
 void clearForwardStack() {
@@ -146,7 +151,7 @@ void getDirectoryInfo(string path) {
     DIR *dr = opendir(path.c_str());
     if (dr == NULL)  // opendir returns NULL if couldn't open directory
     {
-        cout << "Can't Open File Directory\n";
+        cout << "\033[35m" << "Can't Open File Directory. Press Backspace for Parent Directory / Left Space for Previous Directory.\r\n" << "\033[0m";
         return;
     }
      while ((de = readdir(dr)) != NULL){
@@ -200,7 +205,7 @@ void openFile(string filePath) {
     }
 }
 
-// returns fileInfo in a string of size equals to window size
+// returns fileInfo in a string of size equals to window column size
 string resizeFileInfo(vector<string> fileInfo) {
     // FileName
     string fileName = fileInfo[0];
@@ -251,10 +256,14 @@ string resizeFileInfo(vector<string> fileInfo) {
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
     getDirectoryInfo(path);
-    for(int dirIndex = windowStartIndex ; dirIndex < dirInfo.size() && dirIndex < maxRowsInNormalMode; dirIndex++) {
+    for(int dirIndex = windowStartIndex ; /*dirIndex < dirInfo.size() && */dirIndex < maxRowsInNormalMode; dirIndex++) {
+        if(dirIndex >= dirInfo.size()) {
+            cout << "\r\n";
+            continue;
+        }
         vector<string> fileInfo = dirInfo[dirIndex];
         if(normalMode == true && dirIndex == rowIndex) {
-            // cout<<"\033[35m";
+            // cout<<"\033[1;7m";
             cout << cursorSelected << resizeFileInfo(fileInfo) << "\r\n";
             // cout<<"\033[0m";
         }
@@ -266,6 +275,19 @@ void printDirInfo(string path) {
             // cout<<"\033[0m";
         }
     }
+    cout << "----------------------------------------" << "\r\n";
+    // cout<<"\033[1;7m";
+    if(normalMode) {
+        cout << " > Normal Mode" << "\r\n";
+    }
+    else {
+        cout << " > Command Mode" << "\r\n";
+    }
+    // cout<<"\033[0m";
+    cout << currentWorkingDirectory;
+    // cout.flush();
+    if(normalMode == 0) cout << "$ " << inputCommandString ;
+    cout.flush();
 }
 
 // Enables Raw Mode (Canonical Mode)
@@ -291,7 +313,169 @@ void enableRawMode() {
     raw_termios.c_oflag &= ~(OPOST);
     raw_termios.c_cflag |= (CS8);
     raw_termios.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_termios) == -1) printError("tcsetattr");;
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_termios) == -1) printError("tcsetattr");
+}
+
+// Processing input from command and do desired operation.
+void processBufferStringAndDoDesiredOperation() {
+    vector<string> v;
+    string temp = "";
+    for(int i = 0 ; i < inputCommandString.size() ; i++) {
+        if(inputCommandString[i] != ' ') {
+            temp += inputCommandString[i];
+        }
+        else if(temp != "") {
+            v.push_back(temp);
+            temp = "";
+        }
+    }
+    if(temp != "") {
+        v.push_back(temp);
+        temp = "";
+    }
+
+    if(v.size() == 0) {
+        cout << "Invalid Input" << "\r\n";
+    }
+    // Quit
+    else if(v[0] == "quit") {
+        clearScreen();
+        // cout << "Thanks for using File Explorer.\r\n";
+        exit(1);
+    }
+
+    else if(v.size() == 1) {
+        cout << "Invalid Input" << "\r\n";
+    }
+
+    // Goto
+    else if(v[0] == "goto") {
+        if(v.size() == 2) {
+            cout << "goto\r\n";
+        }
+        else {
+            cout << "Invalid Input" << "\r\n";
+        }
+    } 
+    
+    // Search
+    else if(v[0] == "search") {
+        if(v.size() == 2) {
+            cout << "search\r\n";
+        }
+        else {
+            cout << "Invalid Input" << "\r\n";
+        }
+    } 
+
+    // Create File
+    else if(v[0] == "create_file") {
+        if(v.size() == 2) {
+            cout << "create_file\r\n";
+        }
+        else {
+            cout << "Invalid Input" << "\r\n";
+        }
+    } 
+
+    // Create Directory
+    else if(v[0] == "create_dir") {
+        if(v.size() == 2) {
+            cout << "create_dir\r\n";
+        }
+        else {
+            cout << "Invalid Input" << "\r\n";
+        }
+    } 
+
+    // Delete File
+    else if(v[0] == "delete_file") {
+        if(v.size() == 2) {
+            cout << "delete_file\r\n";
+        }
+        else {
+            cout << "Invalid Input" << "\r\n";
+        }
+    } 
+
+    // Delete Directory
+    else if(v[0] == "delete_dir") {
+        if(v.size() == 2) {
+            cout << "delete_dir\r\n";
+        }
+        else {
+            cout << "Invalid Input" << "\r\n";
+        }
+    } 
+
+    // Rename
+    else if(v[0] == "rename") {
+        if(v.size() == 2) {
+            cout << "rename\r\n";
+        }
+        else {
+            cout << "Invalid Input" << "\r\n";
+        }
+    } 
+
+    else  if(v.size() == 2) {
+        cout << "Invalid Input" << "\r\n";
+    }
+
+    // Copy
+    else if(v[0] == "copy") {
+        cout << "copy\r\n";
+    }
+    
+    // Move
+    else if(v[0] == "move") {
+        cout << "copy\r\n";
+    }
+
+    // cout << "\r\n";
+    // for(int i = 0; i < v.size() ; i++) {
+    //     cout << v[i] << "\r\n";
+    // }
+}
+// Key Presses in command Mode.
+void handleKeyPressesInCommandMode() {
+    printDirInfo(currentWorkingDirectory);
+    while(true) {
+        char ch = '\0';
+        read(STDIN_FILENO, &ch, 1);
+        
+        // Escape Key : Should switch to Normal Mode
+        if(ch == 27) {
+            normalMode = 1;
+            inputCommandString = "";
+            break;
+        }
+
+        // Enter Key - Process the Buffer & do desired opertaion.
+        else if(ch == 13) {
+            processBufferStringAndDoDesiredOperation();
+            inputCommandString = "";
+            cout << "Enter Key\r\n";
+        }
+
+        // Backspace : Remove character from Buffer (If available).
+        else if(ch == 127) {
+            if(inputCommandString.size() > 0) {
+                inputCommandString.pop_back();
+            }
+            printDirInfo(currentWorkingDirectory);
+        }
+
+        // Add the input characters to Buffer.
+        else {
+            inputCommandString += ch;
+            printDirInfo(currentWorkingDirectory);
+        }
+        
+    }
+    // cout << "\r\n\033[31m" << "Command Mode is in Implementation Phase." << "\033[0m";
+    // cout.flush();
+    // while(1);
 }
 
 // Handle Escape Key
@@ -310,6 +494,7 @@ int readEscape() {
     return -1;
 }
 
+// Key Presses in Normal Mode.
 void handleKeyPressesInNormalMode() {
     while(true) {
         char finalChar = '\0';
@@ -333,8 +518,10 @@ void handleKeyPressesInNormalMode() {
         
         // : - Enter the Command Mode 
         else if(finalChar == ':') {
-            // normalMode = false;
-            cout << "\033[31m" << "Command Mode is in Implementation Phase.\r\n" << "\033[0m";
+            normalMode = false;
+            // enableCommandMode();
+            handleKeyPressesInCommandMode();
+            printDirInfo(currentWorkingDirectory);
         }
         
         // h - Open Home Directory.
@@ -348,7 +535,7 @@ void handleKeyPressesInNormalMode() {
             // cout << "Home\r\n";
         }
         
-        // Beckspace - Going to Parent Directory
+        // Backspace - Going to Parent Directory
         else if(finalChar == 127) {
             string newDirectory = getParentDirectory(currentWorkingDirectory);
             if(newDirectory != currentWorkingDirectory) {
@@ -399,6 +586,7 @@ void handleKeyPressesInNormalMode() {
             printDirInfo(currentWorkingDirectory);
             // cout << "Up\r\n";
         }
+        
         // Down Key - Scroll Down
         else if(finalChar == 'B') {
             if(rowIndex < dirInfo.size() - 1) rowIndex++;
@@ -425,15 +613,15 @@ void handleKeyPressesInNormalMode() {
                 printDirInfo(currentWorkingDirectory);
             }
         }
+
     }
 }
 
-void myfun(int signal_num) {
+void resizeSignalHandler(int signal_num) {
     // cout << "The interrupt signal is (" << signal_num << "). \n";
     if (SIGWINCH == signal_num) {
         struct winsize w;
         ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-        // if(rowIndex-1 >= maxRowsInNormalMode) windowStartIndex++;
 
         if(w.ws_row < windowRows && rowIndex == maxRowsInNormalMode-1) windowStartIndex++;
         if(w.ws_row > windowRows && windowStartIndex > 0) windowStartIndex--;
@@ -449,29 +637,35 @@ void myfun(int signal_num) {
 }
 
 void testCode() {
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    cout << "Initial Size : \n";
-    printf ("lines %d --", w.ws_row);
-    printf ("columns %d\n", w.ws_col);
-    // windowRows = w.ws_row;
-    // windowCols = w.ws_col;
-    while(1);
     
 }
 
+
 int main(int argc, char **argv)
 {
-    signal(SIGWINCH, myfun);
     // testCode();
+
+    // Signal Handler - For Resizing the Window in Real Time. 
+    // When someone resizes the window, resizeSignalHandler will be called.
+    signal(SIGWINCH, resizeSignalHandler);
+    
+    // Calculating Initial Window Size, when the Application is launched for first time.
     struct winsize w;
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
     windowRows = w.ws_row;
     windowCols = w.ws_col;
+
+    // Fetching the home directory of current user of the system.
     getHomeDirectory();
+    
+    // Fetching the current directory where the application is launched, and sed setting it as current working directory.
+    // So, the Default page when the Application will start, will be current working Directory.
     currentWorkingDirectory = get_current_dir_name();
     if(currentWorkingDirectory[currentWorkingDirectory.size() - 1] != '/') currentWorkingDirectory += '/';
+
+    // Entering Raw Mode.(It will handle key presses in Real Time.)
     enableRawMode();
+    
     printDirInfo(currentWorkingDirectory);
     handleKeyPressesInNormalMode();
 
