@@ -37,6 +37,7 @@ int rowIndex = 0; // cursor pointing to this index.
 string inputCommandString = "";
 
 void handleKeyPressesInCommandMode();
+void printDirInfo(string path);
 
 // Clears Forward Stack
 void clearForwardStack() {
@@ -151,6 +152,10 @@ void getDirectoryInfo(string path) {
     DIR *dr = opendir(path.c_str());
     if (dr == NULL)  // opendir returns NULL if couldn't open directory
     {
+        // currentWorkingDirectory = backwardStack.top();
+        // backwardStack.pop();
+        // clearScreen();
+        // printDirInfo("/");
         cout << "\033[35m" << "Can't Open File Directory. Press Backspace for Parent Directory / Left Space for Previous Directory.\r\n" << "\033[0m";
         return;
     }
@@ -263,9 +268,9 @@ void printDirInfo(string path) {
         }
         vector<string> fileInfo = dirInfo[dirIndex];
         if(normalMode == true && dirIndex == rowIndex) {
-            // cout<<"\033[1;7m";
+            cout<<"\033[1;7m";
             cout << cursorSelected << resizeFileInfo(fileInfo) << "\r\n";
-            // cout<<"\033[0m";
+            cout<<"\033[0m";
         }
         else {
             cout << cursorUnselected << resizeFileInfo(fileInfo) << "\r\n";
@@ -316,12 +321,90 @@ void enableRawMode() {
     if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_termios) == -1) printError("tcsetattr");
 }
 
+// Remove extra '.' and '..' from the path.
+string removeRedundancyFromPath(string path) {
+    vector<string> strArr;
+    stringstream ss (path);
+    string item;
+    while (getline (ss, item, '/')) {
+        cout << item << " " << endl;
+        if(item == "" || item == ".") continue;
+        if(item == "..") {
+            strArr.pop_back();
+            continue;
+        }
+        strArr.push_back (item);
+    }
+    cout << endl << strArr.size() << endl;
+    if(strArr.size() == 0) {
+        return "/";
+    }
+    else {
+        string newDirectory = "/";
+        for(int i = 0 ; i < strArr.size(); i++) {
+            newDirectory += strArr[i] + "/";
+        }
+        return newDirectory;
+    }
+}
+
+// returns the absolute path, irrespetive of when the inputh path is relative or absolute.
+string getAbsolutePath(string path) {
+    string absolutePath = "";
+    if(path[0] != '/') {
+        absolutePath = currentWorkingDirectory + path;
+    }
+    else {
+        absolutePath = path;
+    }
+
+    if(absolutePath[absolutePath.size() - 1] != '/') {
+        absolutePath += '/';
+    }
+    // cout << "Hi : " << absolutePath << endl;
+    absolutePath = removeRedundancyFromPath(absolutePath);
+    // cout << "Hello : " << absolutePath << endl;
+    cout << absolutePath << "\r\n";
+    return absolutePath;
+}
+
+// Switch to any path.
+void goToPath(string path) {
+    string newPath = getAbsolutePath(path);
+    currentWorkingDirectory = newPath;
+    inputCommandString = "";
+    printDirInfo(currentWorkingDirectory);
+}
+
+// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
+bool search(string filename, string path) {
+    if(filename == "." || filename == "..") return true;
+    struct dirent *de;
+    DIR *dr = opendir(path.c_str());
+    if (dr != NULL) {
+            while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            if(d_name == filename) return true;
+            string newPath = path + d_name + "/";
+            // cout << newPath << endl;
+            if(isDirectory(newPath)) {
+                if(search(filename, newPath)) return true;
+            }
+        }
+    }
+    closedir(dr);
+    return 0;
+}
+
 // Processing input from command and do desired operation.
 void processBufferStringAndDoDesiredOperation() {
     vector<string> v;
     string temp = "";
     for(int i = 0 ; i < inputCommandString.size() ; i++) {
-        if(inputCommandString[i] != ' ') {
+        if(inputCommandString[i] != ' ' && inputCommandString[i] != '\t') {
             temp += inputCommandString[i];
         }
         else if(temp != "") {
@@ -333,10 +416,12 @@ void processBufferStringAndDoDesiredOperation() {
         v.push_back(temp);
         temp = "";
     }
+    inputCommandString = "";
 
     if(v.size() == 0) {
         cout << "Invalid Input" << "\r\n";
     }
+    
     // Quit
     else if(v[0] == "quit") {
         clearScreen();
@@ -350,8 +435,10 @@ void processBufferStringAndDoDesiredOperation() {
 
     // Goto
     else if(v[0] == "goto") {
+        // cout << "Hi";
         if(v.size() == 2) {
-            cout << "goto\r\n";
+            goToPath(v[1]);
+            // cout << "goto\r\n";
         }
         else {
             cout << "Invalid Input" << "\r\n";
@@ -361,7 +448,12 @@ void processBufferStringAndDoDesiredOperation() {
     // Search
     else if(v[0] == "search") {
         if(v.size() == 2) {
-            cout << "search\r\n";
+            // cout << "search\r\n";
+            if(search(v[1], currentWorkingDirectory)) {
+                cout << "True" << "\r\n";
+            } else {
+                cout << "False" << "\r\n"; 
+            }
         }
         else {
             cout << "Invalid Input" << "\r\n";
@@ -418,7 +510,7 @@ void processBufferStringAndDoDesiredOperation() {
         }
     } 
 
-    else  if(v.size() == 2) {
+    else if(v.size() == 2) {
         cout << "Invalid Input" << "\r\n";
     }
 
@@ -432,11 +524,15 @@ void processBufferStringAndDoDesiredOperation() {
         cout << "copy\r\n";
     }
 
+    else {
+        cout << "Invalid Input" << "\r\n";
+    }
     // cout << "\r\n";
     // for(int i = 0; i < v.size() ; i++) {
     //     cout << v[i] << "\r\n";
     // }
 }
+
 // Key Presses in command Mode.
 void handleKeyPressesInCommandMode() {
     printDirInfo(currentWorkingDirectory);
@@ -448,14 +544,15 @@ void handleKeyPressesInCommandMode() {
         if(ch == 27) {
             normalMode = 1;
             inputCommandString = "";
+            windowStartIndex = 0;
+            rowIndex = 0;
             break;
         }
 
         // Enter Key - Process the Buffer & do desired opertaion.
         else if(ch == 13) {
             processBufferStringAndDoDesiredOperation();
-            inputCommandString = "";
-            cout << "Enter Key\r\n";
+            // cout << "Enter Key\r\n";
         }
 
         // Backspace : Remove character from Buffer (If available).
@@ -519,7 +616,6 @@ void handleKeyPressesInNormalMode() {
         // : - Enter the Command Mode 
         else if(finalChar == ':') {
             normalMode = false;
-            // enableCommandMode();
             handleKeyPressesInCommandMode();
             printDirInfo(currentWorkingDirectory);
         }
@@ -529,8 +625,11 @@ void handleKeyPressesInNormalMode() {
             rowIndex = 0;
             windowStartIndex = 0;
             clearForwardStack();
-            backwardStack.push(currentWorkingDirectory);
-            currentWorkingDirectory = homeDirectory;
+            if(currentWorkingDirectory != homeDirectory) {
+                backwardStack.push(currentWorkingDirectory);
+                currentWorkingDirectory = homeDirectory;
+            }
+            
             printDirInfo(currentWorkingDirectory);
             // cout << "Home\r\n";
         }
@@ -637,14 +736,14 @@ void resizeSignalHandler(int signal_num) {
 }
 
 void testCode() {
-    
+    // getAbsolutePath("/home/mayank/../mayank/./.././");
 }
 
 
 int main(int argc, char **argv)
 {
     // testCode();
-
+    // while(1);
     // Signal Handler - For Resizing the Window in Real Time. 
     // When someone resizes the window, resizeSignalHandler will be called.
     signal(SIGWINCH, resizeSignalHandler);
