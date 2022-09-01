@@ -16,9 +16,11 @@
 
 #define maxRowsInNormalMode (windowStartIndex + windowRows - 5)
 
-// #define cursorSelected "==> "
-#define cursorSelected ">>> "
-#define cursorUnselected "    "
+// #define cursorSelected ">>> "
+// #define cursorUnselected "    "
+
+#define cursorSelected "> "
+#define cursorUnselected " "
 
 using namespace std;
 
@@ -156,7 +158,20 @@ void getDirectoryInfo(string path) {
         // backwardStack.pop();
         // clearScreen();
         // printDirInfo("/");
-        cout << "\033[35m" << "Can't Open File Directory. Press Backspace for Parent Directory / Left Space for Previous Directory.\r\n" << "\033[0m";
+        
+        int timer = 5;
+        while(timer) {
+            cout << "\033[1;33m" << "Can't Open File Directory.\r\n" << "\033[0m";
+            cout << "\033[1;33m" << "You will be Redirected to Home Directory in " << "\033[0m";
+            cout << "\033[1;4;31m" << timer << "\033[0m";
+            cout << "\033[1;33m"  << " seconds. \r\nPlease wait...\r\n" << "\033[0m";
+            sleep(1);
+            clearScreen();
+            timer--;
+        }
+        
+        currentWorkingDirectory = homeDirectory;
+        getDirectoryInfo(homeDirectory);
         return;
     }
      while ((de = readdir(dr)) != NULL){
@@ -206,7 +221,10 @@ void openFile(string filePath) {
     const char *fileName = filePath.c_str();
     pid_t pid = fork();
     if(pid == 0) {
-        execlp("xdg-open", "xdg-open", fileName, (char *)0);
+        cout << execlp("xdg-open", "xdg-open", fileName, (char *)0) << "\r\n";
+        while(1);
+        // clearScreen();
+        // printDirInfo(currentWorkingDirectory);
     }
 }
 
@@ -327,7 +345,7 @@ string removeRedundancyFromPath(string path) {
     stringstream ss (path);
     string item;
     while (getline (ss, item, '/')) {
-        cout << item << " " << endl;
+        // cout << item << " " << endl;
         if(item == "" || item == ".") continue;
         if(item == "..") {
             strArr.pop_back();
@@ -335,7 +353,7 @@ string removeRedundancyFromPath(string path) {
         }
         strArr.push_back (item);
     }
-    cout << endl << strArr.size() << endl;
+    // cout << endl << strArr.size() << endl;
     if(strArr.size() == 0) {
         return "/";
     }
@@ -351,11 +369,14 @@ string removeRedundancyFromPath(string path) {
 // returns the absolute path, irrespetive of when the inputh path is relative or absolute.
 string getAbsolutePath(string path) {
     string absolutePath = "";
-    if(path[0] != '/') {
-        absolutePath = currentWorkingDirectory + path;
+    if(path[0] == '/') {
+        absolutePath = path;
+    }
+    else if(path[0] == '~') {
+        absolutePath = homeDirectory + path.substr(2,path.size()-2);
     }
     else {
-        absolutePath = path;
+        absolutePath = currentWorkingDirectory + path;
     }
 
     if(absolutePath[absolutePath.size() - 1] != '/') {
@@ -364,7 +385,7 @@ string getAbsolutePath(string path) {
     // cout << "Hi : " << absolutePath << endl;
     absolutePath = removeRedundancyFromPath(absolutePath);
     // cout << "Hello : " << absolutePath << endl;
-    cout << absolutePath << "\r\n";
+    // cout << absolutePath << "\r\n";
     return absolutePath;
 }
 
@@ -399,6 +420,167 @@ bool search(string filename, string path) {
     return 0;
 }
 
+// Create File
+bool createFile(string dirname, string pathname) {
+    string _file = pathname + dirname;
+    if(creat(_file.c_str() , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH) < 0) return false;
+    return true;
+}
+
+// Create Directory
+bool createDirectory(string dirname, string pathname) {
+    string _dir = pathname + dirname;
+    if(mkdir(_dir.c_str() , S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) < 0) return false;
+    return true;
+}
+
+// Copy File
+bool copyFile(string fileSourcePath, string fileDestinationPath) {
+    if(fileSourcePath == fileDestinationPath) return true;
+    int nread;
+    char buffer[8092];
+    int fd_open = open(fileSourcePath.c_str(), O_RDONLY);
+    int fd_close = open(fileDestinationPath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    if(fd_open < 0 || fd_close < 0) return false;
+
+    while((nread = read(fd_open,buffer,sizeof(buffer))) > 0) {
+        write(fd_close,buffer,nread);
+    }
+
+    // Fetching Source File ownership & permission details.
+    struct stat fileStat;
+    stat(fileSourcePath.c_str(),&fileStat);
+
+    // Setting Destination File ownership & permission details.
+    if(chmod(fileDestinationPath.c_str(), fileStat.st_mode) < 0) return false;
+    if(chown(fileDestinationPath.c_str(), fileStat.st_uid, fileStat.st_gid) < 0) return false;;
+    
+    close(fd_open);
+    close(fd_close);
+    return true;
+}
+
+// Create Directory in Destination Path recursively with same Permission as Source.
+bool copyDirectory(string directorySourcePath, string directoryDestinationPath) {
+
+    if(directorySourcePath == "/") return false;
+    if(directorySourcePath[directorySourcePath.size() - 1] == '/') directorySourcePath = directorySourcePath.substr(0, directorySourcePath.size()-1);
+    int found = directorySourcePath.find_last_of('/');
+    
+    string dirPath = directorySourcePath.substr(0, found + 1);
+    string dirName = directorySourcePath.substr(found + 1 , directorySourcePath.size() - found + 1);
+
+    if(dirPath == directoryDestinationPath) return true;
+
+    createDirectory(dirName, directoryDestinationPath);
+
+    // Fetching Source Directory ownership & permission details.
+    struct stat fileStat;
+    stat(directorySourcePath.c_str(),&fileStat);
+
+    string directoryDestinationNewPath = directoryDestinationPath + dirName + '/';
+
+    // Setting Destination Directory ownership & permission details.
+    if(chmod(directoryDestinationNewPath.c_str(), fileStat.st_mode) < 0) return false;
+    if(chown(directoryDestinationNewPath.c_str(), fileStat.st_uid, fileStat.st_gid) < 0) return false;
+
+    struct dirent *de;
+    DIR *dr = opendir(directorySourcePath.c_str());
+    if (dr != NULL) {
+        while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            // cout << d_name << " : ";
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            // if(d_name == filename) return true;
+            string newSourcePath = directorySourcePath + '/' + d_name;
+            // cout << newSourcePath << " : " << directoryDestinationNewPath << endl;
+            // cout << newPath << endl;
+            if(isDirectory(newSourcePath)) {
+                
+                if(copyDirectory(newSourcePath, directoryDestinationNewPath) < 0) return false;
+            }
+            else {
+                copyFile(newSourcePath, directoryDestinationNewPath + d_name);
+            }
+        }
+    }
+    closedir(dr);
+
+
+    return true;   
+}
+
+// Remove File
+bool removeFile(string pathname) {
+
+    if(pathname[pathname.size() - 1] == '/') pathname = pathname.substr(0, pathname.size()-1);
+    if(remove(pathname.c_str()) < 0) return false;
+    return true;
+}
+
+// Remove Directory
+bool removeDirectory(string pathname) {
+    if(rmdir(pathname.c_str()) < 0) return false;
+    return true;
+}
+
+// Delete Directory recursively.
+bool deleteDirectory(string directoryPath) {
+
+    if(directoryPath == "/") return false;
+
+    // if(directorySourcePath[directorySourcePath.size() - 1] == '/') directorySourcePath = directorySourcePath.substr(0, directorySourcePath.size()-1);
+    // int found = directorySourcePath.find_last_of('/');
+    
+    // string dirPath = directorySourcePath.substr(0, found + 1);
+    // string dirName = directorySourcePath.substr(found + 1 , directorySourcePath.size() - found + 1);
+
+    // Fetching Source Directory ownership & permission details.
+    struct stat fileStat;
+    stat(directoryPath.c_str(),&fileStat);
+
+    struct dirent *de;
+    DIR *dr = opendir(directoryPath.c_str());
+
+    if (dr != NULL) {
+        while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            if(isDirectory(directoryPath + d_name)) {
+                
+                if(deleteDirectory(directoryPath + d_name + '/') < 0) return false;
+            }
+            else {
+            	//cout << directoryPath + d_name << endl;
+                if(removeFile(directoryPath + d_name) < 0) return false;
+            }
+        }
+    }
+    closedir(dr);
+
+	//cout << directoryPath << "\n";
+    if(removeDirectory(directoryPath) < 0) return false;
+
+    return true;   
+}
+
+// Rename File
+bool renameFileOrDirectory(string path1, string path2) {
+
+    if(path1[path1.size() - 1] == '/') path1 = path1.substr(0, path1.size()-1);
+    if(path2[path2.size() - 1] == '/') path2 = path2.substr(0, path2.size()-1);
+    if(path1 == path2) return true;
+    if(rename(path1.c_str(), path2.c_str()) < 0) return false;
+    return true;
+}
+
+
+
+
 // Processing input from command and do desired operation.
 void processBufferStringAndDoDesiredOperation() {
     vector<string> v;
@@ -425,12 +607,8 @@ void processBufferStringAndDoDesiredOperation() {
     // Quit
     else if(v[0] == "quit") {
         clearScreen();
-        // cout << "Thanks for using File Explorer.\r\n";
+        cout << "Thanks for using File Explorer.\r\n";
         exit(1);
-    }
-
-    else if(v.size() == 1) {
-        cout << "Invalid Input" << "\r\n";
     }
 
     // Goto
@@ -462,8 +640,14 @@ void processBufferStringAndDoDesiredOperation() {
 
     // Create File
     else if(v[0] == "create_file") {
-        if(v.size() == 2) {
-            cout << "create_file\r\n";
+        if(v.size() == 3) {
+            if(createFile(v[1] , getAbsolutePath(v[2]))){
+                cout << "File Created.";
+            }
+            else {
+                cout << "Not Able to create file.";
+            }
+            // cout << "create_file\r\n";
         }
         else {
             cout << "Invalid Input" << "\r\n";
@@ -472,7 +656,8 @@ void processBufferStringAndDoDesiredOperation() {
 
     // Create Directory
     else if(v[0] == "create_dir") {
-        if(v.size() == 2) {
+        if(v.size() == 3) {
+            createDirectory(v[1] , getAbsolutePath(v[2]));
             cout << "create_dir\r\n";
         }
         else {
@@ -480,48 +665,62 @@ void processBufferStringAndDoDesiredOperation() {
         }
     } 
 
-    // Delete File
-    else if(v[0] == "delete_file") {
-        if(v.size() == 2) {
-            cout << "delete_file\r\n";
+    // Copy
+    else if(v[0] == "copy") {
+        if(v.size() <= 2) {
+            cout << "Invalid Arguments\r\n";
         }
         else {
-            cout << "Invalid Input" << "\r\n";
+            string destinationPath = getAbsolutePath(v[v.size()-1]);
+            for(int i = 1 ; i < v.size() - 1 ; i++) {
+            string sourcePath = getAbsolutePath(v[i]);
+            if(isDirectory(sourcePath)) {
+                copyDirectory(sourcePath, destinationPath);
+            }
+            else {
+                copyFile(sourcePath, destinationPath);
+            }
+        }
+        }
+    }
+
+    // Delete File
+    else if(v[0] == "delete_file") {
+        if(v.size() < 2) {
+            cout << "Invalid Arguments\r\n";
+        }
+        else {
+            for(int i = 1 ; i < v.size() ; i++) {
+                removeFile(getAbsolutePath(v[i]));
+            }
         }
     } 
 
     // Delete Directory
     else if(v[0] == "delete_dir") {
-        if(v.size() == 2) {
-            cout << "delete_dir\r\n";
+        if(v.size() < 2) {
+            cout << "Invalid Arguments\r\n";
         }
         else {
-            cout << "Invalid Input" << "\r\n";
+            for(int i = 1 ; i < v.size() ; i++) {
+                deleteDirectory(getAbsolutePath(v[i]));
+            }
         }
     } 
 
     // Rename
     else if(v[0] == "rename") {
-        if(v.size() == 2) {
-            cout << "rename\r\n";
+        if(v.size() == 3) {
+            renameFileOrDirectory(getAbsolutePath(v[1]), getAbsolutePath(v[2]));
         }
         else {
             cout << "Invalid Input" << "\r\n";
         }
     } 
-
-    else if(v.size() == 2) {
-        cout << "Invalid Input" << "\r\n";
-    }
-
-    // Copy
-    else if(v[0] == "copy") {
-        cout << "copy\r\n";
-    }
     
     // Move
     else if(v[0] == "move") {
-        cout << "copy\r\n";
+        cout << "Move is in Implementation Phase.\r\n";
     }
 
     else {
@@ -742,6 +941,8 @@ void testCode() {
 
 int main(int argc, char **argv)
 {
+    // cout << "\033[?25l";
+    // cout << "\033[?25h";
     // testCode();
     // while(1);
     // Signal Handler - For Resizing the Window in Real Time. 
