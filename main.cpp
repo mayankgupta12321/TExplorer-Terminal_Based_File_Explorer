@@ -14,7 +14,7 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 
-#define maxRowsInNormalMode (windowStartIndex + windowRows - 5)
+#define maxRowsInNormalMode (windowStartIndex + windowRows - 6)
 
 // #define cursorSelected ">>> "
 // #define cursorUnselected "    "
@@ -37,6 +37,12 @@ int windowStartIndex = 0; // First Line of Terminal
 int rowIndex = 0; // cursor pointing to this index.
 
 string inputCommandString = "";
+
+bool success = false;
+bool failure = false;
+
+string success_message = "SUCCESS!!!!";
+string failure_message = "FAILURE!!!!";
 
 void handleKeyPressesInCommandMode();
 void printDirInfo(string path);
@@ -154,17 +160,14 @@ void getDirectoryInfo(string path) {
     DIR *dr = opendir(path.c_str());
     if (dr == NULL)  // opendir returns NULL if couldn't open directory
     {
-        // currentWorkingDirectory = backwardStack.top();
-        // backwardStack.pop();
-        // clearScreen();
-        // printDirInfo("/");
-        
         int timer = 5;
         while(timer) {
-            cout << "\033[1;33m" << "Can't Open File Directory.\r\n" << "\033[0m";
-            cout << "\033[1;33m" << "You will be Redirected to Home Directory in " << "\033[0m";
-            cout << "\033[1;4;31m" << timer << "\033[0m";
-            cout << "\033[1;33m"  << " seconds. \r\nPlease wait...\r\n" << "\033[0m";
+            cout << "\r\n";
+            cout << "\033[1;31m" << " Can't Open File Directory.\r\n" << "\033[0m";
+            cout << "\033[33m" << " You will be Redirected to Home Directory in " << "\033[0m";
+            cout << "\033[1;31m" << timer << "\033[0m";
+            cout << "\033[33m"  << " seconds. \r\n" << "\033[0m";;
+            cout << "\033[1;34m"  << " Please wait...\r\n" << "\033[0m";
             sleep(1);
             clearScreen();
             timer--;
@@ -181,14 +184,13 @@ void getDirectoryInfo(string path) {
     }
     closedir(dr);
 
+    // Sorting the file names
     sort(fileNames.begin() , fileNames.end());
 
+    // Storing the infor of a vector in a string.
     for(string fileName : fileNames) {
-
         vector<string> fileInfo = getFileInfo(fileName, path);
         dirInfo.push_back(fileInfo);
-        // cout << v[1] << "\t" << v[2] << "\t" << v[3] << "\t" << v[4] << "\t" << v[5] << "\t" << v[6] << "\t" << v[0] << "\n";
-        // cout<<"\033[21;35m"<<v[0]<<"\033[0m" << "  " << v[1] << "\n";
     }
   
 }   
@@ -222,14 +224,13 @@ void openFile(string filePath) {
     pid_t pid = fork();
     if(pid == 0) {
         cout << execlp("xdg-open", "xdg-open", fileName, (char *)0) << "\r\n";
-        while(1);
-        // clearScreen();
-        // printDirInfo(currentWorkingDirectory);
     }
 }
 
 // returns fileInfo in a string of size equals to window column size
 string resizeFileInfo(vector<string> fileInfo) {
+    
+    
     // FileName
     string fileName = fileInfo[0];
     while(fileName.size() < 25) {
@@ -239,6 +240,10 @@ string resizeFileInfo(vector<string> fileInfo) {
         fileName = fileName.substr(0, 22) + "..."; 
     }
 
+    // if(fileInfo[5][0] == 'd') fileName = "\033[32m" + fileName + "\033[0m";
+    // else fileName = "\033[32m" + fileName + "\033[0m";
+    // cout << fileInfo[0] << "\r\n";
+
     // FileSize
     string fileSize = fileInfo[2];
     while(fileSize.size() < 7) {
@@ -247,19 +252,19 @@ string resizeFileInfo(vector<string> fileInfo) {
 
     // UserName
     string userName = fileInfo[3];
-    while(userName.size() < 10) {
+    while(userName.size() < 12) {
         userName += ' ';
     }
-    if(userName.size() > 10) {
+    if(userName.size() > 12) {
         userName = userName.substr(0, 7) + "..."; 
     }
 
     // GroupName
     string groupName = fileInfo[4];
-    while(groupName.size() < 10) {
+    while(groupName.size() < 12) {
         groupName += ' ';
     }
-    if(groupName.size() > 10) {
+    if(groupName.size() > 12) {
         groupName = groupName.substr(0, 7) + "..."; 
     }
 
@@ -279,6 +284,9 @@ string resizeFileInfo(vector<string> fileInfo) {
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
     getDirectoryInfo(path);
+    string header = " File Name                      Size   User Name      Group Name     Permission   Last Modified Date";
+    header = header.substr(0,windowCols-5);
+    cout << "\033[1;4;33m" << header << "\033[0m" << "\r\n";
     for(int dirIndex = windowStartIndex ; /*dirIndex < dirInfo.size() && */dirIndex < maxRowsInNormalMode; dirIndex++) {
         if(dirIndex >= dirInfo.size()) {
             cout << "\r\n";
@@ -298,19 +306,40 @@ void printDirInfo(string path) {
             // cout<<"\033[0m";
         }
     }
-    cout << "----------------------------------------" << "\r\n";
+    cout << "\033[1;34m" << "------------------|" << "\033[0m" << "\r\n";
     // cout<<"\033[1;7m";
     if(normalMode) {
-        cout << " > Normal Mode" << "\r\n";
+        cout << "\033[1;33m" << " > Normal Mode\t  " << "\033[0m";
     }
     else {
-        cout << " > Command Mode" << "\r\n";
+        cout << "\033[1;35m" << " > Command Mode\t  " << "\033[0m";
     }
-    // cout<<"\033[0m";
+    cout << "\033[1;34m" << "|" << "\033[0m";
+
+    if(success) {
+        cout << " ";
+        cout << "\033[1;32m" << " :-) " << success_message << "\033[0m";
+        cout.flush();
+    }
+    if(failure) {
+        cout << " ";
+        cout << "\033[1;31m" << " :-( " << failure_message << "\033[0m";
+        cout.flush();
+    }
+
+    cout << "\r\n";
+    cout << "\033[1;34m" << "------------------|" << "\033[0m" << "\r\n";
+    
+    cout<<"\033[1;36m";
     cout << currentWorkingDirectory;
+    cout<<"\033[0m";
     // cout.flush();
-    if(normalMode == 0) cout << "$ " << inputCommandString ;
+    if(normalMode == 0) {
+        cout << "$ " << inputCommandString ;
+    }
     cout.flush();
+
+    
 }
 
 // Enables Raw Mode (Canonical Mode)
@@ -894,6 +923,8 @@ void handleKeyPressesInNormalMode() {
 
         // Right Key - For Next Directory
         else if(finalChar == 'C') {
+            windowStartIndex = 0;
+            rowIndex = 0; 
             if(!forwardStack.empty()) {
                 backwardStack.push(currentWorkingDirectory);
                 currentWorkingDirectory = forwardStack.top();
@@ -905,6 +936,8 @@ void handleKeyPressesInNormalMode() {
         // Left Key - For Previous Visited Directory
         else if(finalChar == 'D') {
             if(!backwardStack.empty()) {
+                windowStartIndex = 0;
+                rowIndex = 0; 
                 forwardStack.push(currentWorkingDirectory);
                 currentWorkingDirectory = backwardStack.top();
                 backwardStack.pop();
@@ -934,9 +967,9 @@ void resizeSignalHandler(int signal_num) {
     }
 }
 
-void testCode() {
-    // getAbsolutePath("/home/mayank/../mayank/./.././");
-}
+// void testCode() {
+//     //
+// }
 
 
 int main(int argc, char **argv)
