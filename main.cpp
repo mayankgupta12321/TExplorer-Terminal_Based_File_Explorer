@@ -57,7 +57,8 @@ void getDirectoryInfo(string path);
 vector<string> getFileInfo(string fileName, string filePath);
 string resizeFileInfo(vector<string> fileInfo);
 string GetTimeAndDate(unsigned long long sec);
-string convertSize(unsigned long int fileSize);
+// string convertSize(unsigned long int fileSize);
+string convertSize(long long int fileSize);
 bool isDirectory(string path);
 bool isFile(string path);
 string getAbsolutePath(string path);
@@ -90,6 +91,35 @@ bool renameFileOrDirectory(string path1, string path2);
 void printError(string s) {
   cout << "Error : " << s << "\r\n";
   exit(1);
+}
+
+// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
+long long int calculateSize(string dirPath) {
+    long long int cur_size = 0;
+    struct dirent *de;
+    DIR *dr = opendir(dirPath.c_str());
+    if (dr != NULL) {
+            while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            
+            string newPath = dirPath + d_name + "/";
+            string fullFileName = dirPath + d_name;
+            if(isDirectory(newPath)) {
+                cur_size += calculateSize(newPath);
+            }
+            else {
+                struct stat fileStat;
+                if(stat(fullFileName.c_str(),&fileStat) >= 0) {
+                    cur_size += fileStat.st_size;
+                }
+            }
+        }
+    }
+    closedir(dr);
+    return cur_size;
 }
 
 
@@ -279,14 +309,14 @@ void getDirectoryInfo(string path) {
         return;
     }
     while ((de = readdir(dr)) != NULL){
-            fileNames.push_back(de->d_name);
+        fileNames.push_back(de->d_name);
     }
     closedir(dr);
 
     // Sorting the file names
     sort(fileNames.begin() , fileNames.end());
 
-    // Storing the infor of a vector in a string.
+    // Storing the metadata of files/directories of current working directory in a vector.
     for(string fileName : fileNames) {
         vector<string> fileInfo = getFileInfo(fileName, path);
         dirInfo.push_back(fileInfo);
@@ -307,7 +337,17 @@ vector<string> getFileInfo(string fileName, string filePath) {
         return {};
     }
     
-    string fileSize = convertSize(fileStat.st_size);
+    string fileSize; 
+    if(S_ISDIR(fileStat.st_mode)) {
+        fileSize = "0KB";
+        fileSize = convertSize(calculateSize(getAbsolutePath(fullFileName)));
+    }
+    else {
+        long long int sz = fileStat.st_size;
+        fileSize = convertSize(sz);
+        // fileSize = "0KB";
+    }
+
     string fileUserName = getpwuid(fileStat.st_uid)->pw_name;
     string fileGroupName = getgrgid(fileStat.st_gid)->gr_name;
 
@@ -394,10 +434,35 @@ string GetTimeAndDate(unsigned long long sec) {
 }
 
 // Convert fileSize from Bytes to B/KB/MB/GB/TB
-string convertSize(unsigned long int fileSize) {
-    unsigned long int kb = 1024;    //KB
-    unsigned long int mb = kb * kb; //MB
-    unsigned long int gb = mb * mb; //GB
+// string convertSize(unsigned long int fileSize) {
+//     unsigned long int kb = 1024;    //KB
+//     unsigned long int mb = kb * kb; //MB
+//     unsigned long int gb = mb * mb; //GB
+
+//     string convertedSize = "";
+//     if(fileSize >= gb) {
+//        convertedSize = to_string(llround(fileSize/gb)) + "GB";
+//     }
+//     else if(fileSize >= mb) {
+//        convertedSize = to_string(llround(fileSize/mb)) + "MB";
+//     }
+//     else if(fileSize >= kb) {
+//        convertedSize = to_string(llround(fileSize/kb)) + "KB";
+//     }
+//     else {
+//         convertedSize = to_string(fileSize) + "B";
+//     }
+
+//     return convertedSize;
+// }
+
+// Convert fileSize from Bytes to B/KB/MB/GB/TB
+string convertSize(long long int fileSize) {
+    long long int kb = 1024;    //KB
+    long long int mb = 1048576; //MB
+    long long int gb = 1073741824; //GB
+
+    // cout << kb << " - " << mb << " - " << gb << " - " << "\n";
 
     string convertedSize = "";
     if(fileSize >= gb) {
@@ -415,6 +480,7 @@ string convertSize(unsigned long int fileSize) {
 
     return convertedSize;
 }
+
 
 // Check If given path is a directory
 bool isDirectory(string path) {
