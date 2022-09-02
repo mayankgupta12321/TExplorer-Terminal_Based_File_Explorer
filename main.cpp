@@ -14,13 +14,11 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 
-#define maxRowsInNormalMode (windowStartIndex + windowRows - 6)
+#define maxRowsInNormalMode (windowStartIndex + windowRows - 7)
 
-// #define cursorSelected ">>> "
-// #define cursorUnselected "    "
-
+// #define cursorSelected "⮕ "
 #define cursorSelected "> "
-#define cursorUnselected " "
+#define cursorUnselected "  "
 
 using namespace std;
 
@@ -42,6 +40,7 @@ bool success = false;
 bool failure = false;
 
 string success_message = "SUCCESS!!!!";
+//  string success_message = "2 File's/Directorie's Copied.";
 string failure_message = "FAILURE!!!!";
 
 /******************************************
@@ -60,6 +59,7 @@ string resizeFileInfo(vector<string> fileInfo);
 string GetTimeAndDate(unsigned long long sec);
 string convertSize(unsigned long int fileSize);
 bool isDirectory(string path);
+bool isFile(string path);
 string getAbsolutePath(string path);
 string removeRedundancyFromPath(string path);
 
@@ -71,6 +71,17 @@ void openFile(string filePath);
 
 
 void handleKeyPressesInCommandMode();
+void processBufferStringAndDoDesiredOperation();
+void goToPath(string path) ;
+bool search(string filename, string path);
+bool createFile(string dirname, string pathname);
+bool createDirectory(string dirname, string pathname);
+bool copyDirectory(string directorySourcePath, string directoryDestinationPath);
+bool copyFile(string fileSourcePath, string fileDestinationPath);
+bool removeFile(string pathname);
+bool removeDirectory(string pathname);
+bool deleteDirectory(string directoryPath);
+bool renameFileOrDirectory(string path1, string path2);
 
 // ------------------------------------------------------------------
 
@@ -81,392 +92,6 @@ void printError(string s) {
   exit(1);
 }
 
-// Switch to any path.
-void goToPath(string path) {
-    string newPath = getAbsolutePath(path);
-    currentWorkingDirectory = newPath;
-    inputCommandString = "";
-    printDirInfo(currentWorkingDirectory);
-}
-
-// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
-bool search(string filename, string path) {
-    if(filename == "." || filename == "..") return true;
-    struct dirent *de;
-    DIR *dr = opendir(path.c_str());
-    if (dr != NULL) {
-            while ((de = readdir(dr)) != NULL) {
-            string d_name = de->d_name;
-            if(d_name == "." || d_name == "..") {
-                continue;
-            }
-            if(d_name == filename) return true;
-            string newPath = path + d_name + "/";
-            // cout << newPath << endl;
-            if(isDirectory(newPath)) {
-                if(search(filename, newPath)) return true;
-            }
-        }
-    }
-    closedir(dr);
-    return 0;
-}
-
-// Create File
-bool createFile(string dirname, string pathname) {
-    string _file = pathname + dirname;
-    if(creat(_file.c_str() , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH) < 0) return false;
-    return true;
-}
-
-// Create Directory
-bool createDirectory(string dirname, string pathname) {
-    string _dir = pathname + dirname;
-    if(mkdir(_dir.c_str() , S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) < 0) return false;
-    return true;
-}
-
-// Copy File
-bool copyFile(string fileSourcePath, string fileDestinationPath) {
-    if(fileSourcePath == fileDestinationPath) return true;
-    int nread;
-    char buffer[8092];
-    int fd_open = open(fileSourcePath.c_str(), O_RDONLY);
-    int fd_close = open(fileDestinationPath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    if(fd_open < 0 || fd_close < 0) return false;
-
-    while((nread = read(fd_open,buffer,sizeof(buffer))) > 0) {
-        write(fd_close,buffer,nread);
-    }
-
-    // Fetching Source File ownership & permission details.
-    struct stat fileStat;
-    stat(fileSourcePath.c_str(),&fileStat);
-
-    // Setting Destination File ownership & permission details.
-    if(chmod(fileDestinationPath.c_str(), fileStat.st_mode) < 0) return false;
-    if(chown(fileDestinationPath.c_str(), fileStat.st_uid, fileStat.st_gid) < 0) return false;;
-    
-    close(fd_open);
-    close(fd_close);
-    return true;
-}
-
-// Create Directory in Destination Path recursively with same Permission as Source.
-bool copyDirectory(string directorySourcePath, string directoryDestinationPath) {
-
-    if(directorySourcePath == "/") return false;
-    if(directorySourcePath[directorySourcePath.size() - 1] == '/') directorySourcePath = directorySourcePath.substr(0, directorySourcePath.size()-1);
-    int found = directorySourcePath.find_last_of('/');
-    
-    string dirPath = directorySourcePath.substr(0, found + 1);
-    string dirName = directorySourcePath.substr(found + 1 , directorySourcePath.size() - found + 1);
-
-    if(dirPath == directoryDestinationPath) return true;
-
-    createDirectory(dirName, directoryDestinationPath);
-
-    // Fetching Source Directory ownership & permission details.
-    struct stat fileStat;
-    stat(directorySourcePath.c_str(),&fileStat);
-
-    string directoryDestinationNewPath = directoryDestinationPath + dirName + '/';
-
-    // Setting Destination Directory ownership & permission details.
-    if(chmod(directoryDestinationNewPath.c_str(), fileStat.st_mode) < 0) return false;
-    if(chown(directoryDestinationNewPath.c_str(), fileStat.st_uid, fileStat.st_gid) < 0) return false;
-
-    struct dirent *de;
-    DIR *dr = opendir(directorySourcePath.c_str());
-    if (dr != NULL) {
-        while ((de = readdir(dr)) != NULL) {
-            string d_name = de->d_name;
-            // cout << d_name << " : ";
-            if(d_name == "." || d_name == "..") {
-                continue;
-            }
-            // if(d_name == filename) return true;
-            string newSourcePath = directorySourcePath + '/' + d_name;
-            // cout << newSourcePath << " : " << directoryDestinationNewPath << endl;
-            // cout << newPath << endl;
-            if(isDirectory(newSourcePath)) {
-                
-                if(copyDirectory(newSourcePath, directoryDestinationNewPath) < 0) return false;
-            }
-            else {
-                copyFile(newSourcePath, directoryDestinationNewPath + d_name);
-            }
-        }
-    }
-    closedir(dr);
-
-
-    return true;   
-}
-
-// Remove File
-bool removeFile(string pathname) {
-
-    if(pathname[pathname.size() - 1] == '/') pathname = pathname.substr(0, pathname.size()-1);
-    if(remove(pathname.c_str()) < 0) return false;
-    return true;
-}
-
-// Remove Directory
-bool removeDirectory(string pathname) {
-    if(rmdir(pathname.c_str()) < 0) return false;
-    return true;
-}
-
-// Delete Directory recursively.
-bool deleteDirectory(string directoryPath) {
-
-    if(directoryPath == "/") return false;
-
-    // if(directorySourcePath[directorySourcePath.size() - 1] == '/') directorySourcePath = directorySourcePath.substr(0, directorySourcePath.size()-1);
-    // int found = directorySourcePath.find_last_of('/');
-    
-    // string dirPath = directorySourcePath.substr(0, found + 1);
-    // string dirName = directorySourcePath.substr(found + 1 , directorySourcePath.size() - found + 1);
-
-    // Fetching Source Directory ownership & permission details.
-    struct stat fileStat;
-    stat(directoryPath.c_str(),&fileStat);
-
-    struct dirent *de;
-    DIR *dr = opendir(directoryPath.c_str());
-
-    if (dr != NULL) {
-        while ((de = readdir(dr)) != NULL) {
-            string d_name = de->d_name;
-            if(d_name == "." || d_name == "..") {
-                continue;
-            }
-            if(isDirectory(directoryPath + d_name)) {
-                
-                if(deleteDirectory(directoryPath + d_name + '/') < 0) return false;
-            }
-            else {
-            	//cout << directoryPath + d_name << endl;
-                if(removeFile(directoryPath + d_name) < 0) return false;
-            }
-        }
-    }
-    closedir(dr);
-
-	//cout << directoryPath << "\n";
-    if(removeDirectory(directoryPath) < 0) return false;
-
-    return true;   
-}
-
-// Rename File
-bool renameFileOrDirectory(string path1, string path2) {
-
-    if(path1[path1.size() - 1] == '/') path1 = path1.substr(0, path1.size()-1);
-    if(path2[path2.size() - 1] == '/') path2 = path2.substr(0, path2.size()-1);
-    if(path1 == path2) return true;
-    if(rename(path1.c_str(), path2.c_str()) < 0) return false;
-    return true;
-}
-
-
-// Processing input from command and do desired operation.
-void processBufferStringAndDoDesiredOperation() {
-    vector<string> v;
-    string temp = "";
-    for(int i = 0 ; i < inputCommandString.size() ; i++) {
-        if(inputCommandString[i] != ' ' && inputCommandString[i] != '\t') {
-            temp += inputCommandString[i];
-        }
-        else if(temp != "") {
-            v.push_back(temp);
-            temp = "";
-        }
-    }
-    if(temp != "") {
-        v.push_back(temp);
-        temp = "";
-    }
-    inputCommandString = "";
-
-    if(v.size() == 0) {
-        cout << "Invalid Input" << "\r\n";
-    }
-    
-    // Quit
-    else if(v[0] == "quit") {
-        clearScreen();
-        cout << "Thanks for using File Explorer.\r\n";
-        exit(1);
-    }
-
-    // Goto
-    else if(v[0] == "goto") {
-        // cout << "Hi";
-        if(v.size() == 2) {
-            goToPath(v[1]);
-            // cout << "goto\r\n";
-        }
-        else {
-            cout << "Invalid Input" << "\r\n";
-        }
-    } 
-    
-    // Search
-    else if(v[0] == "search") {
-        if(v.size() == 2) {
-            // cout << "search\r\n";
-            if(search(v[1], currentWorkingDirectory)) {
-                cout << "True" << "\r\n";
-            } else {
-                cout << "False" << "\r\n"; 
-            }
-        }
-        else {
-            cout << "Invalid Input" << "\r\n";
-        }
-    } 
-
-    // Create File
-    else if(v[0] == "create_file") {
-        if(v.size() == 3) {
-            if(createFile(v[1] , getAbsolutePath(v[2]))){
-                cout << "File Created.";
-            }
-            else {
-                cout << "Not Able to create file.";
-            }
-            // cout << "create_file\r\n";
-        }
-        else {
-            cout << "Invalid Input" << "\r\n";
-        }
-    } 
-
-    // Create Directory
-    else if(v[0] == "create_dir") {
-        if(v.size() == 3) {
-            createDirectory(v[1] , getAbsolutePath(v[2]));
-            cout << "create_dir\r\n";
-        }
-        else {
-            cout << "Invalid Input" << "\r\n";
-        }
-    } 
-
-    // Copy
-    else if(v[0] == "copy") {
-        if(v.size() <= 2) {
-            cout << "Invalid Arguments\r\n";
-        }
-        else {
-            string destinationPath = getAbsolutePath(v[v.size()-1]);
-            for(int i = 1 ; i < v.size() - 1 ; i++) {
-            string sourcePath = getAbsolutePath(v[i]);
-            if(isDirectory(sourcePath)) {
-                copyDirectory(sourcePath, destinationPath);
-            }
-            else {
-                copyFile(sourcePath, destinationPath);
-            }
-        }
-        }
-    }
-
-    // Delete File
-    else if(v[0] == "delete_file") {
-        if(v.size() < 2) {
-            cout << "Invalid Arguments\r\n";
-        }
-        else {
-            for(int i = 1 ; i < v.size() ; i++) {
-                removeFile(getAbsolutePath(v[i]));
-            }
-        }
-    } 
-
-    // Delete Directory
-    else if(v[0] == "delete_dir") {
-        if(v.size() < 2) {
-            cout << "Invalid Arguments\r\n";
-        }
-        else {
-            for(int i = 1 ; i < v.size() ; i++) {
-                deleteDirectory(getAbsolutePath(v[i]));
-            }
-        }
-    } 
-
-    // Rename
-    else if(v[0] == "rename") {
-        if(v.size() == 3) {
-            renameFileOrDirectory(getAbsolutePath(v[1]), getAbsolutePath(v[2]));
-        }
-        else {
-            cout << "Invalid Input" << "\r\n";
-        }
-    } 
-    
-    // Move
-    else if(v[0] == "move") {
-        cout << "Move is in Implementation Phase.\r\n";
-    }
-
-    else {
-        cout << "Invalid Input" << "\r\n";
-    }
-    // cout << "\r\n";
-    // for(int i = 0; i < v.size() ; i++) {
-    //     cout << v[i] << "\r\n";
-    // }
-}
-
-// Key Presses in command Mode.
-void handleKeyPressesInCommandMode() {
-    printDirInfo(currentWorkingDirectory);
-    while(true) {
-        char ch = '\0';
-        read(STDIN_FILENO, &ch, 1);
-        
-        // Escape Key : Should switch to Normal Mode
-        if(ch == 27) {
-            normalMode = 1;
-            inputCommandString = "";
-            windowStartIndex = 0;
-            rowIndex = 0;
-            break;
-        }
-
-        // Enter Key - Process the Buffer & do desired opertaion.
-        else if(ch == 13) {
-            processBufferStringAndDoDesiredOperation();
-            // cout << "Enter Key\r\n";
-        }
-
-        // Backspace : Remove character from Buffer (If available).
-        else if(ch == 127) {
-            if(inputCommandString.size() > 0) {
-                inputCommandString.pop_back();
-            }
-            printDirInfo(currentWorkingDirectory);
-        }
-
-        // Add the input characters to Buffer.
-        else {
-            inputCommandString += ch;
-            printDirInfo(currentWorkingDirectory);
-        }
-        
-    }
-    // cout << "\r\n\033[31m" << "Command Mode is in Implementation Phase." << "\033[0m";
-    // cout.flush();
-    // while(1);
-}
-
-// void testCode() {
-//     //
-// }
 
 
 /******************************************
@@ -476,7 +101,7 @@ int main(int argc, char **argv)
 {
     // cout << "\033[?25l";
     // cout << "\033[?25h";
-    // testCode();
+
     initialise();
     
     return 0;
@@ -581,8 +206,10 @@ void printDirInfo(string path) {
         }
         vector<string> fileInfo = dirInfo[dirIndex];
         if(normalMode == true && dirIndex == rowIndex) {
+            
             cout<<"\033[1;7m";
-            cout << cursorSelected << resizeFileInfo(fileInfo) << "\r\n";
+            cout << cursorSelected;
+            cout << resizeFileInfo(fileInfo) << "\r\n";
             cout<<"\033[0m";
         }
         else {
@@ -675,7 +302,8 @@ vector<string> getFileInfo(string fileName, string filePath) {
 
     struct stat fileStat;
     if(stat(fullFileName.c_str(),&fileStat) < 0)   {
-        cout << "File Not Exists \n";
+        failure = 1;
+        failure_message = "File Not Exists.";
         return {};
     }
     
@@ -795,14 +423,22 @@ bool isDirectory(string path) {
     return S_ISDIR(fileStat.st_mode);
 }
 
+// Check If given path is a directory
+bool isFile(string path) {
+    struct stat fileStat;
+    stat(path.c_str(),&fileStat);
+    return S_ISREG(fileStat.st_mode);
+}
+
 // returns the absolute path, irrespetive of when the inputh path is relative or absolute.
-string getAbsolutePath(string path) {
+string  getAbsolutePath(string path) {
     string absolutePath = "";
     if(path[0] == '/') {
         absolutePath = path;
     }
     else if(path[0] == '~') {
-        absolutePath = homeDirectory + path.substr(2,path.size()-2);
+        if(path.size() <= 2) absolutePath = homeDirectory;
+        else absolutePath = homeDirectory + path.substr(2);
     }
     else {
         absolutePath = currentWorkingDirectory + path;
@@ -823,7 +459,7 @@ string removeRedundancyFromPath(string path) {
     while (getline (ss, item, '/')) {
         if(item == "" || item == ".") continue;
         if(item == "..") {
-            strArr.pop_back();
+            if(strArr.size() != 0) strArr.pop_back();
             continue;
         }
         strArr.push_back (item);
@@ -841,7 +477,7 @@ string removeRedundancyFromPath(string path) {
 }
 
 // Key Presses in Normal Mode.
-void handleKeyPressesInNormalMode() {
+void handleKeyPressesInNormalMode() {   
     while(true) {
         char finalChar = '\0';
         char ch;
@@ -860,7 +496,9 @@ void handleKeyPressesInNormalMode() {
         // Quit('q') - Close the Application
         if(finalChar == 'q') { 
             clearScreen();
-            cout << "Thanks for using File Explorer.\r\n";
+            cout << "\r\n";
+            cout << "\033[1;35m" << " Thanks for using File Explorer." << "\033[0m";
+            cout << "\r\n\r\n";
             exit(1);
         }
         
@@ -1027,4 +665,504 @@ void openFile(string filePath) {
     }
 }
 
+
+// Key Presses in command Mode.
+void handleKeyPressesInCommandMode() {
+    printDirInfo(currentWorkingDirectory);
+    while(true) {
+        char ch = '\0';
+        read(STDIN_FILENO, &ch, 1);
+        
+        // Escape Key : Should switch to Normal Mode
+        if(ch == 27) {
+            normalMode = 1;
+            inputCommandString = "";
+            windowStartIndex = 0;
+            rowIndex = 0;
+            break;
+        }
+
+        // Enter Key - Process the Buffer & do desired opertaion.
+        else if(ch == 13) {
+            processBufferStringAndDoDesiredOperation();
+        }
+
+        // Backspace : Remove character from Buffer (If available).
+        else if(ch == 127) {
+            if(inputCommandString.size() > 0) {
+                inputCommandString.pop_back();
+            }
+            printDirInfo(currentWorkingDirectory);
+        }
+
+        // Add the input characters to Buffer.
+        else {
+            inputCommandString += ch;
+            printDirInfo(currentWorkingDirectory);
+        }
+        
+    }
+}
+
+// Processing input from command and do desired operation.
+void processBufferStringAndDoDesiredOperation() {
+    vector<string> v;
+    string temp = "";
+    for(int i = 0 ; i < inputCommandString.size() ; i++) {
+        if(inputCommandString[i] != ' ' && inputCommandString[i] != '\t') {
+            temp += inputCommandString[i];
+        }
+        else if(temp != "") {
+            v.push_back(temp);
+            temp = "";
+        }
+    }
+    if(temp != "") {
+        v.push_back(temp);
+        temp = "";
+    }
+    inputCommandString = "";
+
+    if(v.size() == 0) {
+        failure = 1;
+        failure_message = "Please provide any Input.";
+        printDirInfo(currentWorkingDirectory);
+    }
+    
+    // Quit
+    else if(v[0] == "quit") {
+        clearScreen();
+        cout << "\r\n";
+        cout << "\033[1;35m" << " Thanks for using File Explorer." << "\033[0m";
+        cout << "\r\n\r\n";
+        exit(1);
+    }
+
+    // Goto
+    else if(v[0] == "goto") {
+        if(v.size() == 2) {
+            goToPath(v[1]);
+        }
+        else {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+    } 
+    
+    // Search
+    else if(v[0] == "search") {
+        if(currentWorkingDirectory == "/") {
+            failure = 1;
+            failure_message = "You don't have permission to do operation on root directory.";
+            printDirInfo(currentWorkingDirectory);
+        }
+        else if(v.size() == 2) {
+            if(search(v[1], currentWorkingDirectory)) {
+                success = 1;
+                success_message = "True. File Found.";
+                printDirInfo(currentWorkingDirectory);
+            } else {
+                failure = 1;
+                failure_message = "False. File Not Found.";
+                printDirInfo(currentWorkingDirectory);
+            }
+        }
+        else {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+    } 
+
+    // Create File
+    else if(v[0] == "create_file") {
+        if(v.size() == 3) {
+            if(createFile(v[1] , getAbsolutePath(v[2]))){
+                success = 1;
+                success_message = "File Created.";
+                printDirInfo(currentWorkingDirectory);
+            }
+            else {
+                failure = 1;
+                failure_message = "File Not Created.";
+                printDirInfo(currentWorkingDirectory);
+            }
+        }
+        else {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+    } 
+
+    // Create Directory
+    else if(v[0] == "create_dir") {
+        if(v.size() == 3) {
+            if(createDirectory(v[1] , getAbsolutePath(v[2]))) {
+                success = 1;
+                success_message = "Directory Created.";
+                printDirInfo(currentWorkingDirectory);
+            }
+            else {
+                failure = 1;
+                failure_message = "Directory Not Created.";
+                printDirInfo(currentWorkingDirectory);
+            }
+        }
+        else {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+    } 
+
+    // Copy
+    else if(v[0] == "copy") {
+        if(v.size() <= 2) {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+        else {
+            string destinationPath = getAbsolutePath(v[v.size()-1]);
+            int cnt_copied = 0;
+            for(int i = 1 ; i < v.size() - 1 ; i++) {
+                string sourcePath = getAbsolutePath(v[i]);
+                if(isDirectory(sourcePath)) {
+                    if(copyDirectory(sourcePath, destinationPath)){
+                        cnt_copied++;
+                    }
+                }
+                else {                
+                    if(sourcePath[sourcePath.size() - 1] == '/') sourcePath = sourcePath.substr(0, sourcePath.size()-1);     
+                    if(isFile(sourcePath)) {
+                        int found = sourcePath.find_last_of('/');
+                        string filePath = sourcePath.substr(0, found + 1);
+                        string fileName = sourcePath.substr(found + 1 , sourcePath.size() - found + 1);
+                        if(copyFile(sourcePath, destinationPath + fileName)){
+                            cnt_copied++;
+                        }
+                    }
+                    
+                }
+            }
+
+            if(cnt_copied) {
+                success = 1;
+                success_message = to_string(cnt_copied) + " Files/Directories Copied.";
+            }
+            else {
+                failure = 1;
+                failure_message = "No Files/Directories Copied.";
+            }
+            printDirInfo(currentWorkingDirectory);
+        }
+    }
+
+    // Delete File
+    else if(v[0] == "delete_file") {
+        if(v.size() < 2) {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+        else {
+            int cnt_deleted = 0;
+            for(int i = 1 ; i < v.size() ; i++) {
+                if(removeFile(getAbsolutePath(v[i]))) {
+                    cnt_deleted++;
+                }
+            }
+
+            if(cnt_deleted) {
+                success = 1;
+                success_message = to_string(cnt_deleted) + " Files Deleted.";
+            }
+            else {
+                failure = 1;
+                failure_message = "No Files Deleted.";
+            }
+            printDirInfo(currentWorkingDirectory);
+        }
+    } 
+
+    // Delete Directory
+    else if(v[0] == "delete_dir") {
+        if(v.size() < 2) {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+        else {
+            int cnt_deleted = 0;
+            for(int i = 1 ; i < v.size() ; i++) {
+                if(deleteDirectory(getAbsolutePath(v[i]))) {
+                    cnt_deleted++;
+                }
+            }
+            if(cnt_deleted) {
+                success = 1;
+                success_message = "Delete Operation Successful.";
+            }
+            else {
+                failure = 1;
+                failure_message = "Delete Operation Failed.";
+            }
+            printDirInfo(currentWorkingDirectory);
+        }
+    } 
+
+    // Rename
+    else if(v[0] == "rename") {
+        if(v.size() == 3) {
+            if(renameFileOrDirectory(getAbsolutePath(v[1]), getAbsolutePath(v[2]))) {
+                success = 1;
+                success_message = "File/Directory Renamed Successfully.";
+            }
+            else {
+                failure = 1;
+                failure_message = "Rename Operation Failed.";
+            }
+            printDirInfo(currentWorkingDirectory);
+        }
+        else {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+    } 
+    
+    // Move
+    else if(v[0] == "move") {
+        if(v.size() <= 2) {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+        else {
+            string destinationPath = getAbsolutePath(v[v.size()-1]);
+            int cnt_moved = 0;
+            for(int i = 1 ; i < v.size() - 1 ; i++) {
+                string sourcePath = getAbsolutePath(v[i]);
+                if(isDirectory(sourcePath)) {
+                    if(copyDirectory(sourcePath, destinationPath)){
+                        if(deleteDirectory(getAbsolutePath(v[i]))) {
+                            cnt_moved++;
+                        }
+                    }
+                }
+                else {                
+                    if(sourcePath[sourcePath.size() - 1] == '/') sourcePath = sourcePath.substr(0, sourcePath.size()-1);
+                    
+                    if(isFile(sourcePath)) {
+                        int found = sourcePath.find_last_of('/');
+                        string filePath = sourcePath.substr(0, found + 1);
+                        string fileName = sourcePath.substr(found + 1 , sourcePath.size() - found + 1);
+                        if(copyFile(sourcePath, destinationPath + fileName)){
+                            if(removeFile(getAbsolutePath(v[i]))) {
+                                cnt_moved++;
+                            }
+                        }
+                    }
+                    
+                }
+            }
+
+            if(cnt_moved) {
+                success = 1;
+                success_message = to_string(cnt_moved) + " Files/Directories Moved.";
+            }
+            else {
+                failure = 1;
+                failure_message = "No Files/Directories Moved.";
+            }
+            printDirInfo(currentWorkingDirectory);
+        }
+    }
+
+    else {
+        failure = 1;
+        failure_message = "Invalid Input!!!";
+        printDirInfo(currentWorkingDirectory);
+    }
+}
+
+// Switch to any path.
+void goToPath(string path) {
+    string newPath = getAbsolutePath(path);
+    currentWorkingDirectory = newPath;
+    inputCommandString = "";
+    printDirInfo(currentWorkingDirectory);
+}
+
+// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
+bool search(string filename, string path) {
+    if(filename == "." || filename == "..") return true;
+    struct dirent *de;
+    DIR *dr = opendir(path.c_str());
+    if (dr != NULL) {
+            while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            if(d_name == filename) {
+                return true;
+            }
+            string newPath = path + d_name + "/";
+            if(isDirectory(newPath)) {
+                if(search(filename, newPath)) {
+                    return true;
+                }
+            }
+        }
+    }
+    closedir(dr);
+    return 0;
+}
+
+// Create File
+bool createFile(string dirname, string pathname) {
+    string _file = pathname + dirname;
+    if(creat(_file.c_str() , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH) < 0) return false;
+    return true;
+}
+
+// Create Directory
+bool createDirectory(string dirname, string pathname) {
+    string _dir = pathname + dirname;
+    if(mkdir(_dir.c_str() , S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) < 0) return false;
+    return true;
+}
+
+// Create Directory in Destination Path recursively with same Permission as Source.
+bool copyDirectory(string directorySourcePath, string directoryDestinationPath) {
+
+    if(directorySourcePath == "/") return false;
+    if(directorySourcePath[directorySourcePath.size() - 1] == '/') directorySourcePath = directorySourcePath.substr(0, directorySourcePath.size()-1);
+    int found = directorySourcePath.find_last_of('/');
+    
+    string dirPath = directorySourcePath.substr(0, found + 1);
+    string dirName = directorySourcePath.substr(found + 1 , directorySourcePath.size() - found + 1);
+
+    if(dirPath == directoryDestinationPath) return true;
+
+    createDirectory(dirName, directoryDestinationPath);
+
+    // Fetching Source Directory ownership & permission details.
+    struct stat fileStat;
+    stat(directorySourcePath.c_str(),&fileStat);
+
+    string directoryDestinationNewPath = directoryDestinationPath + dirName + '/';
+
+    // Setting Destination Directory ownership & permission details.
+    if(chmod(directoryDestinationNewPath.c_str(), fileStat.st_mode) < 0) return false;
+    if(chown(directoryDestinationNewPath.c_str(), fileStat.st_uid, fileStat.st_gid) < 0) return false;
+
+    struct dirent *de;
+    DIR *dr = opendir(directorySourcePath.c_str());
+    if (dr != NULL) {
+        while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            string newSourcePath = directorySourcePath + '/' + d_name;
+            if(isDirectory(newSourcePath)) {
+                
+                if(copyDirectory(newSourcePath, directoryDestinationNewPath) < 0) return false;
+            }
+            else {
+                copyFile(newSourcePath, directoryDestinationNewPath + d_name);
+            }
+        }
+    }
+    closedir(dr);
+
+
+    return true;   
+}
+
+// Copy File
+bool copyFile(string fileSourcePath, string fileDestinationPath) {
+    if(fileSourcePath == fileDestinationPath) return true;
+    int nread;
+    char buffer[8092];
+    int fd_open = open(fileSourcePath.c_str(), O_RDONLY);
+    int fd_close = open(fileDestinationPath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    if(fd_open < 0 || fd_close < 0) return false;
+
+    while((nread = read(fd_open,buffer,sizeof(buffer))) > 0) {
+        write(fd_close,buffer,nread);
+    }
+
+    // Fetching Source File ownership & permission details.
+    struct stat fileStat;
+    stat(fileSourcePath.c_str(),&fileStat);
+
+    // Setting Destination File ownership & permission details.
+    if(chmod(fileDestinationPath.c_str(), fileStat.st_mode) < 0) return false;
+    if(chown(fileDestinationPath.c_str(), fileStat.st_uid, fileStat.st_gid) < 0) return false;;
+    
+    close(fd_open);
+    close(fd_close);
+    return true;
+}
+
+// Remove File
+bool removeFile(string pathname) {
+    if(pathname[pathname.size() - 1] == '/') pathname = pathname.substr(0, pathname.size()-1);
+    if(remove(pathname.c_str()) < 0) return false;
+    return true;
+}
+
+// Remove Directory
+bool removeDirectory(string pathname) {
+    if(rmdir(pathname.c_str()) < 0) return false;
+    return true;
+}
+
+// Delete Directory recursively.
+bool deleteDirectory(string directoryPath) {
+
+    if(directoryPath == "/") return false;
+
+    struct stat fileStat;
+    stat(directoryPath.c_str(),&fileStat);
+
+    struct dirent *de;
+    DIR *dr = opendir(directoryPath.c_str());
+
+    if (dr != NULL) {
+        // First Deleting all the files & folder within current directory recursively.
+        while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            if(isDirectory(directoryPath + d_name)) {
+                if(deleteDirectory(directoryPath + d_name + '/') < 0) return false;
+            }
+            else {
+                if(removeFile(directoryPath + d_name) < 0) return false;
+            }
+        }
+    }
+    closedir(dr);
+
+    // Then Deleting the directory itself.
+    if(removeDirectory(directoryPath) < 0) return false;
+
+    return true;   
+}
+
+// Rename File
+bool renameFileOrDirectory(string path1, string path2) {
+    if(path1[path1.size() - 1] == '/') path1 = path1.substr(0, path1.size()-1);
+    if(path2[path2.size() - 1] == '/') path2 = path2.substr(0, path2.size()-1);
+    if(path1 == path2) return true;
+    if(rename(path1.c_str(), path2.c_str()) < 0) return false;
+    return true;
+}
 
