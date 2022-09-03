@@ -264,7 +264,7 @@ void printDirInfo(string path) {
     }
     cout.flush();
     if(normalMode) {
-        cout << "\033[" << windowRows << "H";
+        cout << "\r\n\r\n\r\n";
         cout << " Created By :- Mayank Gupta - 2022201012 - IIIT Hyderabad.";
         cout.flush();
     }
