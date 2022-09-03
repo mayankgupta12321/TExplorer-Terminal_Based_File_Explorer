@@ -14,13 +14,16 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 
-#define maxRowsInNormalMode (windowStartIndex + windowRows - 7)
-
-// #define cursorSelected "⮕ "
-#define cursorSelected "> "
+#define maxRowsInNormalMode (windowStartIndex + windowRows - 9)
+#define cursorSelected "⮕ "
 #define cursorUnselected "  "
 
 using namespace std;
+
+
+/******************************************
+    Variable Declaration                  *
+*******************************************/
 
 string homeDirectory;
 string currentWorkingDirectory;
@@ -39,14 +42,15 @@ string inputCommandString = "";
 bool success = false;
 bool failure = false;
 
-string success_message = "SUCCESS!!!!";
-//  string success_message = "2 File's/Directorie's Copied.";
-string failure_message = "FAILURE!!!!";
+string success_message ;
+string failure_message ;
 
 /******************************************
     Function Declaration                  *
 *******************************************/
 void initialise();
+void showCursor();
+void hideCursor();
 void enableRawMode();
 void disableRawMode();
 void resizeSignalHandler(int signal_num);
@@ -55,9 +59,9 @@ void getHomeDirectory();
 void printDirInfo(string path);
 void getDirectoryInfo(string path);
 vector<string> getFileInfo(string fileName, string filePath);
+long long int calculateSize(string dirPath);
 string resizeFileInfo(vector<string> fileInfo);
 string GetTimeAndDate(unsigned long long sec);
-// string convertSize(unsigned long int fileSize);
 string convertSize(long long int fileSize);
 bool isDirectory(string path);
 bool isFile(string path);
@@ -86,52 +90,11 @@ bool renameFileOrDirectory(string path1, string path2);
 
 // ------------------------------------------------------------------
 
-
-// Prints the Error & Exit from the Programme
-void printError(string s) {
-  cout << "Error : " << s << "\r\n";
-  exit(1);
-}
-
-// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
-long long int calculateSize(string dirPath) {
-    long long int cur_size = 0;
-    struct dirent *de;
-    DIR *dr = opendir(dirPath.c_str());
-    if (dr != NULL) {
-            while ((de = readdir(dr)) != NULL) {
-            string d_name = de->d_name;
-            if(d_name == "." || d_name == "..") {
-                continue;
-            }
-            
-            string newPath = dirPath + d_name + "/";
-            string fullFileName = dirPath + d_name;
-            if(isDirectory(newPath)) {
-                cur_size += calculateSize(newPath);
-            }
-            else {
-                struct stat fileStat;
-                if(stat(fullFileName.c_str(),&fileStat) >= 0) {
-                    cur_size += fileStat.st_size;
-                }
-            }
-        }
-    }
-    closedir(dr);
-    return cur_size;
-}
-
-
-
 /******************************************
     Driver Function                       *
 *******************************************/
 int main(int argc, char **argv)
 {
-    // cout << "\033[?25l";
-    // cout << "\033[?25h";
-
     initialise();
     
     return 0;
@@ -143,6 +106,8 @@ void initialise() {
     // Signal Handler - For Resizing the Window in Real Time. 
     // When someone resizes the window, resizeSignalHandler will be called.
     signal(SIGWINCH, resizeSignalHandler);
+
+    hideCursor(); //As Default mode is normal Mode, so hiding the cursor.
 
     // Calculating Initial Window Size, when the Application is launched for first time.
     struct winsize w;
@@ -160,10 +125,20 @@ void initialise() {
 
     // Entering Raw Mode.(It will handle key presses in Real Time.)
     enableRawMode();
-    
+    getDirectoryInfo(currentWorkingDirectory);
     printDirInfo(currentWorkingDirectory);
     handleKeyPressesInNormalMode();
 
+}
+
+// Display the cursor
+void showCursor() {
+    cout << "\033[?25h"; // Show Cursor
+}
+
+// Hide the cursor
+void hideCursor() {
+    cout << "\033[?25l"; // Hide Cursor
 }
 
 // Enables Raw Mode (Non-Canonical Mode)
@@ -178,7 +153,8 @@ void enableRawMode() {
     // speed_t c_ospeed;		/* output speed */
     if(tcgetattr(STDIN_FILENO, &original_termios) == -1) 
     {
-        printError("tcgetattr");
+        cout << "Error\n";
+        cout.flush();
     }
     atexit(disableRawMode);
 
@@ -188,13 +164,17 @@ void enableRawMode() {
     raw_termios.c_cflag |= (CS8);
     raw_termios.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_termios) == -1) {
-        printError("tcsetattr");
+        cout << "Error\n";
+        cout.flush();
     }
 }
 
 // Enables Raw Mode (Canonical Mode)
 void disableRawMode() {
-    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios) == -1) printError("tcgetattr");
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios) == -1) {
+        cout << "Error\n";
+        cout.flush();
+    }
 }
 
 // Handles Window Resizing in Real Time.
@@ -225,18 +205,17 @@ void getHomeDirectory() {
 // Print Directory Info
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
-    getDirectoryInfo(path);
-    string header = " File Name                      Size   User Name      Group Name     Permission   Last Modified Date";
+    // getDirectoryInfo(path);
+    string header = " File Name                      Size    User Name      Group Name     Permission   Last Modified Date";
     header = header.substr(0,windowCols-5);
-    // cout << "\033[1;4;33m" << header << "\033[0m" << "\r\n";
+    cout << "\033[1;4;33m" << header << "\033[0m" << "\r\n";
     for(int dirIndex = windowStartIndex ; dirIndex < maxRowsInNormalMode; dirIndex++) {
         if(dirIndex >= dirInfo.size()) {
             cout << "\r\n";
             continue;
         }
         vector<string> fileInfo = dirInfo[dirIndex];
-        if(normalMode == true && dirIndex == rowIndex) {
-            
+        if(normalMode == true && dirIndex == rowIndex) {           
             cout<<"\033[1;7m";
             cout << cursorSelected;
             cout << resizeFileInfo(fileInfo) << "\r\n";
@@ -246,32 +225,35 @@ void printDirInfo(string path) {
             cout << cursorUnselected << resizeFileInfo(fileInfo) << "\r\n";
         }
     }
-    // cout << "\033[1;34m" << "------------------|" << "\033[0m" << "\r\n";
+    cout << "\033[1;34m" << "------------------|" << "\033[0m" << "\r\n";
     if(normalMode) {
         cout << "\033[1;33m" << " > Normal Mode\t  " << "\033[0m";
     }
     else {
         cout << "\033[1;35m" << " > Command Mode\t  " << "\033[0m";
     }
-    // cout << "\033[1;34m" << "|" << "\033[0m";
+    cout << "\033[1;34m" << "|" << "\033[0m";
 
-    if(success) {
+    if(failure) {
+        cout << " ";
+        cout << "\033[1;31m" << " :-( " << failure_message << "\033[0m";
+        cout.flush();
+        failure_message = "";
+        failure = false;        
+        success_message = "";
+        success = false;
+    }
+    else if(success) {
         cout << " ";
         cout << "\033[1;32m" << " :-) " << success_message << "\033[0m";
         cout.flush();
         success_message = "";
         success = false;
     }
-    if(failure) {
-        cout << " ";
-        cout << "\033[1;31m" << " :-( " << failure_message << "\033[0m";
-        cout.flush();
-        failure_message = "";
-        failure = false;
-    }
+    
 
     cout << "\r\n";
-    // cout << "\033[1;34m" << "------------------|" << "\033[0m" << "\r\n";
+    cout << "\033[1;34m" << "------------------|" << "\033[0m" << "\r\n";
     
     cout<<"\033[1;36m";
     cout << currentWorkingDirectory;
@@ -280,34 +262,45 @@ void printDirInfo(string path) {
     if(normalMode == 0) {
         cout << "$ " << inputCommandString ;
     }
-    cout.flush();   
+    cout.flush();
+    if(normalMode) {
+        cout << "\033[" << windowRows << "H";
+        cout << " Created By :- Mayank Gupta - 2022201012 - IIIT Hyderabad.";
+        cout.flush();
+    }
 }
 
 // Stores the directory/Files info into global vector dirInfo.
 void getDirectoryInfo(string path) {
-    dirInfo.clear();
-    vector<string> fileNames; // For storing names of files & sub-directories
     struct dirent *de;
     DIR *dr = opendir(path.c_str());
     if (dr == NULL)  // opendir returns NULL if couldn't open directory
     {
+        currentWorkingDirectory = backwardStack.top();
+        backwardStack.pop();
+
         int timer = 5;
+
         while(timer) {
-            cout << "\r\n";
-            cout << "\033[1;31m" << " Can't Open File Directory.\r\n" << "\033[0m";
-            cout << "\033[33m" << " You will be Redirected to Home Directory in " << "\033[0m";
-            cout << "\033[1;31m" << timer << "\033[0m";
-            cout << "\033[33m"  << " seconds. \r\n" << "\033[0m";;
-            cout << "\033[1;34m"  << " Please wait...\r\n" << "\033[0m";
-            sleep(1);
             clearScreen();
+            cout << "\r\n";
+            cout << "\033[91m" << " Either the directory you want to visit doesn't Exists, or you don't have read-write permissions..\r\n" << "\033[0m";
+            cout << "\033[33m" << " Redirecting you to " << "\033[0m";
+            cout << "\033[93m" << currentWorkingDirectory << "\033[0m";
+            cout << "\033[33m" <<" in " << "\033[0m";
+            cout << "\033[1;4;31m" << timer << "\033[0m";
+            cout << "\033[33m"  << " seconds. \r\n" << "\033[0m";;
+            cout << "\033[1;94m"  << " Please wait...\r\n" << "\033[0m";
+            sleep(1);
             timer--;
         }
         
-        currentWorkingDirectory = homeDirectory;
-        getDirectoryInfo(homeDirectory);
         return;
     }
+    
+    dirInfo.clear();
+    vector<string> fileNames; // For storing names of files & sub-directories
+    
     while ((de = readdir(dr)) != NULL){
         fileNames.push_back(de->d_name);
     }
@@ -339,15 +332,11 @@ vector<string> getFileInfo(string fileName, string filePath) {
     
     string fileSize; 
     if(S_ISDIR(fileStat.st_mode)) {
-        fileSize = "0KB";
-        fileSize = convertSize(calculateSize(getAbsolutePath(fullFileName)));
+        fileSize = convertSize(calculateSize(getAbsolutePath(fullFileName)/*, getAbsolutePath(filePath)*/ ));
     }
     else {
-        long long int sz = fileStat.st_size;
-        fileSize = convertSize(sz);
-        // fileSize = "0KB";
+        fileSize = convertSize(fileStat.st_size);
     }
-
     string fileUserName = getpwuid(fileStat.st_uid)->pw_name;
     string fileGroupName = getgrgid(fileStat.st_gid)->gr_name;
 
@@ -374,6 +363,35 @@ vector<string> getFileInfo(string fileName, string filePath) {
     fileInfo.push_back(fileLastModifiedDate);   //fileInfo[6] = fileLastModifiedDate
 
     return fileInfo;
+}
+
+// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
+long long int calculateSize(string dirPath) {
+    long long int cur_size = 0;
+    struct dirent *de;
+    DIR *dr = opendir(dirPath.c_str());
+    if (dr != NULL) {
+        while ((de = readdir(dr)) != NULL) {
+            string d_name = de->d_name;
+            if(d_name == "." || d_name == "..") {
+                continue;
+            }
+            
+            string newPath = dirPath + d_name + "/";
+            string fullFileName = dirPath + d_name;
+            if(isDirectory(newPath)) {
+                    cur_size += calculateSize(newPath);
+            }
+            else {
+                struct stat fileStat;
+                if(stat(fullFileName.c_str(),&fileStat) >= 0) {
+                    cur_size += fileStat.st_size;
+                }
+            }
+        }
+    }
+    closedir(dr);
+    return cur_size;
 }
 
 // returns fileInfo in a string of size equals to window column size
@@ -434,35 +452,10 @@ string GetTimeAndDate(unsigned long long sec) {
 }
 
 // Convert fileSize from Bytes to B/KB/MB/GB/TB
-// string convertSize(unsigned long int fileSize) {
-//     unsigned long int kb = 1024;    //KB
-//     unsigned long int mb = kb * kb; //MB
-//     unsigned long int gb = mb * mb; //GB
-
-//     string convertedSize = "";
-//     if(fileSize >= gb) {
-//        convertedSize = to_string(llround(fileSize/gb)) + "GB";
-//     }
-//     else if(fileSize >= mb) {
-//        convertedSize = to_string(llround(fileSize/mb)) + "MB";
-//     }
-//     else if(fileSize >= kb) {
-//        convertedSize = to_string(llround(fileSize/kb)) + "KB";
-//     }
-//     else {
-//         convertedSize = to_string(fileSize) + "B";
-//     }
-
-//     return convertedSize;
-// }
-
-// Convert fileSize from Bytes to B/KB/MB/GB/TB
 string convertSize(long long int fileSize) {
     long long int kb = 1024;    //KB
     long long int mb = 1048576; //MB
     long long int gb = 1073741824; //GB
-
-    // cout << kb << " - " << mb << " - " << gb << " - " << "\n";
 
     string convertedSize = "";
     if(fileSize >= gb) {
@@ -480,7 +473,6 @@ string convertSize(long long int fileSize) {
 
     return convertedSize;
 }
-
 
 // Check If given path is a directory
 bool isDirectory(string path) {
@@ -571,7 +563,10 @@ void handleKeyPressesInNormalMode() {
         // : - Enter the Command Mode 
         else if(finalChar == ':') {
             normalMode = false;
+            showCursor();
             handleKeyPressesInCommandMode();
+            hideCursor();
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
         
@@ -584,9 +579,8 @@ void handleKeyPressesInNormalMode() {
                 backwardStack.push(currentWorkingDirectory);
                 currentWorkingDirectory = homeDirectory;
             }
-            
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
-            // cout << "Home\r\n";
         }
         
         // Backspace - Going to Parent Directory
@@ -599,6 +593,7 @@ void handleKeyPressesInNormalMode() {
             rowIndex = 0;
             windowStartIndex = 0;
             currentWorkingDirectory = newDirectory;
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
         
@@ -617,6 +612,7 @@ void handleKeyPressesInNormalMode() {
                 rowIndex = 0;
                 windowStartIndex = 0;
                 currentWorkingDirectory = newDirectory;
+                getDirectoryInfo(currentWorkingDirectory);
                 printDirInfo(currentWorkingDirectory);
             }
             
@@ -628,6 +624,7 @@ void handleKeyPressesInNormalMode() {
                 rowIndex = 0;
                 windowStartIndex = 0;
                 currentWorkingDirectory = newDirectory;
+                getDirectoryInfo(currentWorkingDirectory);
                 printDirInfo(currentWorkingDirectory);
             }
             
@@ -659,6 +656,7 @@ void handleKeyPressesInNormalMode() {
                 backwardStack.push(currentWorkingDirectory);
                 currentWorkingDirectory = forwardStack.top();
                 forwardStack.pop();
+                getDirectoryInfo(currentWorkingDirectory);
                 printDirInfo(currentWorkingDirectory);
             }
         }
@@ -671,7 +669,9 @@ void handleKeyPressesInNormalMode() {
                 forwardStack.push(currentWorkingDirectory);
                 currentWorkingDirectory = backwardStack.top();
                 backwardStack.pop();
+                getDirectoryInfo(currentWorkingDirectory);
                 printDirInfo(currentWorkingDirectory);
+                
             }
         }
 
@@ -731,7 +731,6 @@ void openFile(string filePath) {
     }
 }
 
-
 // Key Presses in command Mode.
 void handleKeyPressesInCommandMode() {
     printDirInfo(currentWorkingDirectory);
@@ -783,6 +782,7 @@ void processBufferStringAndDoDesiredOperation() {
             temp = "";
         }
     }
+    
     if(temp != "") {
         v.push_back(temp);
         temp = "";
@@ -847,6 +847,7 @@ void processBufferStringAndDoDesiredOperation() {
             if(createFile(v[1] , getAbsolutePath(v[2]))){
                 success = 1;
                 success_message = "File Created.";
+                getDirectoryInfo(currentWorkingDirectory);
                 printDirInfo(currentWorkingDirectory);
             }
             else {
@@ -868,6 +869,7 @@ void processBufferStringAndDoDesiredOperation() {
             if(createDirectory(v[1] , getAbsolutePath(v[2]))) {
                 success = 1;
                 success_message = "Directory Created.";
+                getDirectoryInfo(currentWorkingDirectory);
                 printDirInfo(currentWorkingDirectory);
             }
             else {
@@ -949,6 +951,7 @@ void processBufferStringAndDoDesiredOperation() {
                 failure = 1;
                 failure_message = "No Files Deleted.";
             }
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
     } 
@@ -975,6 +978,7 @@ void processBufferStringAndDoDesiredOperation() {
                 failure = 1;
                 failure_message = "Delete Operation Failed.";
             }
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
     } 
@@ -990,6 +994,7 @@ void processBufferStringAndDoDesiredOperation() {
                 failure = 1;
                 failure_message = "Rename Operation Failed.";
             }
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
         else {
@@ -1043,10 +1048,12 @@ void processBufferStringAndDoDesiredOperation() {
                 failure = 1;
                 failure_message = "No Files/Directories Moved.";
             }
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
     }
 
+    // Undefined Command
     else {
         failure = 1;
         failure_message = "Invalid Input!!!";
@@ -1057,8 +1064,15 @@ void processBufferStringAndDoDesiredOperation() {
 // Switch to any path.
 void goToPath(string path) {
     string newPath = getAbsolutePath(path);
+    if(newPath == currentWorkingDirectory) {
+        printDirInfo(currentWorkingDirectory);
+        return;
+    }
+    clearForwardStack();
+    backwardStack.push(currentWorkingDirectory);
     currentWorkingDirectory = newPath;
     inputCommandString = "";
+    getDirectoryInfo(currentWorkingDirectory);
     printDirInfo(currentWorkingDirectory);
 }
 
@@ -1231,4 +1245,3 @@ bool renameFileOrDirectory(string path1, string path2) {
     if(rename(path1.c_str(), path2.c_str()) < 0) return false;
     return true;
 }
-
