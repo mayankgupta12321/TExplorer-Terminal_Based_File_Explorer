@@ -15,7 +15,7 @@
 #include <signal.h>
 
 #define maxRowsInNormalMode (windowStartIndex + windowRows - 9)
-#define cursorSelected "⮕ "
+#define cursorSelected "⮕  "
 #define cursorUnselected "  "
 
 using namespace std;
@@ -87,8 +87,6 @@ bool removeFile(string pathname);
 bool removeDirectory(string pathname);
 bool deleteDirectory(string directoryPath);
 bool renameFileOrDirectory(string path1, string path2);
-
-// ------------------------------------------------------------------
 
 /******************************************
     Driver Function                       *
@@ -206,7 +204,7 @@ void getHomeDirectory() {
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
     // getDirectoryInfo(path);
-    string header = " File Name                      Size    User Name      Group Name     Permission   Last Modified Date";
+    string header = "  File Name                      Size  User Name      Group Name      Permission   Last Modified Date";
     header = header.substr(0,windowCols-5);
     cout << "\033[1;4;33m" << header << "\033[0m" << "\r\n";
     for(int dirIndex = windowStartIndex ; dirIndex < maxRowsInNormalMode; dirIndex++) {
@@ -216,8 +214,8 @@ void printDirInfo(string path) {
         }
         vector<string> fileInfo = dirInfo[dirIndex];
         if(normalMode == true && dirIndex == rowIndex) {           
-            cout<<"\033[1;7m";
             cout << cursorSelected;
+            cout<<"\033[1;7m";
             cout << resizeFileInfo(fileInfo) << "\r\n";
             cout<<"\033[0m";
         }
@@ -255,7 +253,9 @@ void printDirInfo(string path) {
     cout << "\r\n";
     cout << "\033[1;34m" << "------------------|" << "\033[0m" << "\r\n";
     
-    cout<<"\033[1;36m";
+    // cout<<"\033[1;36m";
+
+    cout<<"\033[1;44;97m";
     cout << currentWorkingDirectory;
     cout<<"\033[0m";
     // cout.flush();
@@ -264,8 +264,10 @@ void printDirInfo(string path) {
     }
     cout.flush();
     if(normalMode) {
+        string footer = " Created By :- Mayank Gupta - 2022201012 - IIIT Hyderabad.";
+        footer = footer.substr(0,windowCols-5);
         cout << "\r\n\r\n\r\n";
-        cout << " Created By :- Mayank Gupta - 2022201012 - IIIT Hyderabad.";
+        cout << footer;
         cout.flush();
     }
 }
@@ -278,6 +280,7 @@ void getDirectoryInfo(string path) {
     {
         currentWorkingDirectory = backwardStack.top();
         backwardStack.pop();
+        getDirectoryInfo(currentWorkingDirectory);
 
         int timer = 5;
 
@@ -331,8 +334,8 @@ vector<string> getFileInfo(string fileName, string filePath) {
     }
     
     string fileSize; 
-    if(S_ISDIR(fileStat.st_mode)) {
-        fileSize = convertSize(calculateSize(getAbsolutePath(fullFileName)/*, getAbsolutePath(filePath)*/ ));
+    if(S_ISDIR(fileStat.st_mode) && filePath.size() >= homeDirectory.size()) {
+        fileSize = convertSize(calculateSize(getAbsolutePath(fullFileName)));
     }
     else {
         fileSize = convertSize(fileStat.st_size);
@@ -843,44 +846,58 @@ void processBufferStringAndDoDesiredOperation() {
 
     // Create File
     else if(v[0] == "create_file") {
-        if(v.size() == 3) {
-            if(createFile(v[1] , getAbsolutePath(v[2]))){
+        if(v.size() <= 2) {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+        else {
+            string destinationPath = getAbsolutePath(v[v.size()-1]);
+            int cnt_file_created = 0;
+            for(int i = 1 ; i < v.size() - 1 ; i++) {
+                if(createFile(v[i] , destinationPath)) {
+                    cnt_file_created++;
+                }
+            }
+
+            if(cnt_file_created) {
                 success = 1;
-                success_message = "File Created.";
-                getDirectoryInfo(currentWorkingDirectory);
-                printDirInfo(currentWorkingDirectory);
+                success_message = to_string(cnt_file_created) + " Files Created in " + destinationPath + ".";
             }
             else {
                 failure = 1;
-                failure_message = "File Not Created.";
-                printDirInfo(currentWorkingDirectory);
+                failure_message = "No Files Deleted.";
             }
-        }
-        else {
-            failure = 1;
-            failure_message = "Invalid number of arguments.";
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
     } 
 
     // Create Directory
     else if(v[0] == "create_dir") {
-        if(v.size() == 3) {
-            if(createDirectory(v[1] , getAbsolutePath(v[2]))) {
+        if(v.size() <= 2) {
+            failure = 1;
+            failure_message = "Invalid number of arguments.";
+            printDirInfo(currentWorkingDirectory);
+        }
+        else {
+            string destinationPath = getAbsolutePath(v[v.size()-1]);
+            int cnt_directory_created = 0;
+            for(int i = 1 ; i < v.size() - 1 ; i++) {
+                if(createDirectory(v[i] , destinationPath)) {
+                    cnt_directory_created++;
+                }
+            }
+
+            if(cnt_directory_created) {
                 success = 1;
-                success_message = "Directory Created.";
-                getDirectoryInfo(currentWorkingDirectory);
-                printDirInfo(currentWorkingDirectory);
+                success_message = to_string(cnt_directory_created) + " Directories Created in " + destinationPath + ".";
             }
             else {
                 failure = 1;
-                failure_message = "Directory Not Created.";
-                printDirInfo(currentWorkingDirectory);
+                failure_message = "No Files Deleted.";
             }
-        }
-        else {
-            failure = 1;
-            failure_message = "Invalid number of arguments.";
+            getDirectoryInfo(currentWorkingDirectory);
             printDirInfo(currentWorkingDirectory);
         }
     } 
@@ -918,7 +935,7 @@ void processBufferStringAndDoDesiredOperation() {
 
             if(cnt_copied) {
                 success = 1;
-                success_message = to_string(cnt_copied) + " Files/Directories Copied.";
+                success_message = to_string(cnt_copied) + " Files/Directories Copied to " + destinationPath + ".";
             }
             else {
                 failure = 1;
@@ -1042,7 +1059,7 @@ void processBufferStringAndDoDesiredOperation() {
 
             if(cnt_moved) {
                 success = 1;
-                success_message = to_string(cnt_moved) + " Files/Directories Moved.";
+                success_message = to_string(cnt_moved) + " Files/Directories Moved to " + destinationPath + ".";
             }
             else {
                 failure = 1;
