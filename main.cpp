@@ -129,17 +129,26 @@ void initialise() {
 
 }
 
-// Display the cursor
+
+/******************************************
+    Display the cursor                    *
+*******************************************/
 void showCursor() {
     cout << "\033[?25h"; // Show Cursor
 }
 
-// Hide the cursor
+
+/******************************************
+    Hide the cursor                       *
+*******************************************/
 void hideCursor() {
     cout << "\033[?25l"; // Hide Cursor
 }
 
-// Enables Raw Mode (Non-Canonical Mode)
+
+/******************************************
+    Enables Raw Mode (Non-Canonical Mode) *
+*******************************************/
 void enableRawMode() {
     // tcflag_t c_iflag;		/* input mode flags */
     // tcflag_t c_oflag;		/* output mode flags */
@@ -167,7 +176,10 @@ void enableRawMode() {
     }
 }
 
-// Enables Raw Mode (Canonical Mode)
+
+/******************************************
+    Disable Raw Mode (Canonical Mode)     *
+*******************************************/
 void disableRawMode() {
     if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios) == -1) {
         cout << "Error\n";
@@ -175,7 +187,10 @@ void disableRawMode() {
     }
 }
 
-// Handles Window Resizing in Real Time.
+
+/******************************************
+    Handles Window Resizing in Real Time. *
+*******************************************/
 void resizeSignalHandler(int signal_num) {
     if (SIGWINCH == signal_num) {
         struct winsize w;
@@ -190,17 +205,26 @@ void resizeSignalHandler(int signal_num) {
     }
 }
 
-// Clears the Screen.
+
+/******************************************
+    Clears the Screen.                    *
+*******************************************/
 void clearScreen() {
     cout << "\033[H\033[2J\033[3J"; // ANSI escape Sequence to clear screen.
 }
 
-// Fetching Current System User, and storing it in global variable systemUserName
+
+/**************************************************************************************
+    Fetching Current System User, and storing it in global variable systemUserName    *
+***************************************************************************************/
 void getHomeDirectory() {
     homeDirectory = "/home/" + (string)getpwuid(getuid())->pw_name + "/";
 }
 
-// Print Directory Info
+
+/******************************************
+    Print Directory Info                  *
+*******************************************/
 void printDirInfo(string path) {
     clearScreen(); //Clearing the Screen before Printing.
     // getDirectoryInfo(path);
@@ -272,7 +296,10 @@ void printDirInfo(string path) {
     }
 }
 
-// Stores the directory/Files info into global vector dirInfo.
+
+/*****************************************************************
+    Stores the directory/Files info into global vector dirInfo.  *
+******************************************************************/
 void getDirectoryInfo(string path) {
     struct dirent *de;
     DIR *dr = opendir(path.c_str());
@@ -320,7 +347,10 @@ void getDirectoryInfo(string path) {
   
 }   
 
-// for fetching File Info stats like git status(fileSize , username, groupname, last modified date, file permission)
+
+/***********************************************************************************************************
+    Fetches File Info & stats like (fileSize , username, groupname, last modified date, file permission)   *
+************************************************************************************************************/
 vector<string> getFileInfo(string fileName, string filePath) {
     vector<string> fileInfo;
 
@@ -368,7 +398,10 @@ vector<string> getFileInfo(string fileName, string filePath) {
     return fileInfo;
 }
 
-// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
+
+/***********************************************************************************************************
+    Recursively Checks if the given file/directory is present in current working directory or not.         *
+************************************************************************************************************/
 long long int calculateSize(string dirPath) {
     long long int cur_size = 0;
     struct dirent *de;
@@ -397,7 +430,10 @@ long long int calculateSize(string dirPath) {
     return cur_size;
 }
 
-// returns fileInfo in a string of size equals to window column size
+
+/***********************************************************************
+    returns fileInfo in a string of size equals to window column size  *
+************************************************************************/
 string resizeFileInfo(vector<string> fileInfo) {
     
     // FileName
@@ -445,7 +481,9 @@ string resizeFileInfo(vector<string> fileInfo) {
     return resizedFileInfo;
 }
 
-// Convert Seconds into date/time;
+/******************************************
+    Convert Seconds into date/time.       *
+*******************************************/
 string GetTimeAndDate(unsigned long long sec) {
     char date[100];
     time_t seconds = (time_t)(sec);
@@ -454,7 +492,10 @@ string GetTimeAndDate(unsigned long long sec) {
     return date;
 }
 
-// Convert fileSize from Bytes to B/KB/MB/GB/TB
+
+/***************************************************
+    Convert fileSize from Bytes to B/KB/MB/GB/TB   *
+****************************************************/
 string convertSize(long long int fileSize) {
     long long int kb = 1024;    //KB
     long long int mb = 1048576; //MB
@@ -477,21 +518,30 @@ string convertSize(long long int fileSize) {
     return convertedSize;
 }
 
-// Check If given path is a directory
+
+/******************************************
+    Check If given path is a directory.   *
+*******************************************/
 bool isDirectory(string path) {
     struct stat fileStat;
     stat(path.c_str(),&fileStat);
     return S_ISDIR(fileStat.st_mode);
 }
 
-// Check If given path is a directory
+
+/******************************************
+    Check If given path is a file.        *
+*******************************************/
 bool isFile(string path) {
     struct stat fileStat;
     stat(path.c_str(),&fileStat);
     return S_ISREG(fileStat.st_mode);
 }
 
-// returns the absolute path, irrespetive of when the inputh path is relative or absolute.
+
+/**********************************************************************************************
+    Returns the absolute path, irrespetive of when the input path is relative or absolute.    *
+***********************************************************************************************/
 string  getAbsolutePath(string path) {
     string absolutePath = "";
     if(path[0] == '/') {
@@ -512,7 +562,10 @@ string  getAbsolutePath(string path) {
     return absolutePath;
 }
 
-// Remove extra '.' and '..' from the path.
+
+/***********************************************
+    Remove extra '.' and '..' from the path.   *
+************************************************/
 string removeRedundancyFromPath(string path) {
     vector<string> strArr;
     stringstream ss (path);
@@ -537,7 +590,10 @@ string removeRedundancyFromPath(string path) {
     }
 }
 
-// Key Presses in Normal Mode.
+
+/******************************************
+    Key Presses in Normal Mode.           *
+*******************************************/
 void handleKeyPressesInNormalMode() {   
     while(true) {
         char finalChar = '\0';
@@ -681,7 +737,10 @@ void handleKeyPressesInNormalMode() {
     }
 }
 
-// Handle Escape Key
+
+/******************************************
+    Handle Escape Key                     *
+*******************************************/
 int readEscape() {
     char finalChar = '\0';
     char ch1;
@@ -697,14 +756,21 @@ int readEscape() {
     return -1;
 }
 
-// Clears Forward Stack
+
+/******************************************
+    Clears Forward Stack                  *
+*******************************************/
+// 
 void clearForwardStack() {
     while (!forwardStack.empty()) {
         forwardStack.pop();
     }
 }
 
-// Returns Parent Directory
+
+/******************************************
+    Returns Parent Directory              *
+*******************************************/
 string getParentDirectory(string path) {
     vector<string> strArr;
     stringstream ss (path);
@@ -725,7 +791,10 @@ string getParentDirectory(string path) {
     }
 }
 
-// Opens the file in default editor
+
+/******************************************
+    Opens the file in default editor.     *
+*******************************************/
 void openFile(string filePath) {
     const char *fileName = filePath.c_str();
     pid_t pid = fork();
@@ -734,7 +803,10 @@ void openFile(string filePath) {
     }
 }
 
-// Key Presses in command Mode.
+
+/******************************************
+    Key Presses in command Mode.          *
+*******************************************/
 void handleKeyPressesInCommandMode() {
     printDirInfo(currentWorkingDirectory);
     while(true) {
@@ -772,7 +844,10 @@ void handleKeyPressesInCommandMode() {
     }
 }
 
-// Processing input from command and do desired operation.
+
+/**************************************************************
+    Processing input from command and do desired operation.   *
+***************************************************************/
 void processBufferStringAndDoDesiredOperation() {
     vector<string> v;
     string temp = "";
@@ -1078,7 +1153,10 @@ void processBufferStringAndDoDesiredOperation() {
     }
 }
 
-// Switch to any path.
+
+/************************************************
+    Switch to any path.(Relative or Absolute)   *
+*************************************************/
 void goToPath(string path) {
     string newPath = getAbsolutePath(path);
     if(newPath == currentWorkingDirectory) {
@@ -1093,7 +1171,10 @@ void goToPath(string path) {
     printDirInfo(currentWorkingDirectory);
 }
 
-// Checks if the given file/directory is present in current working directory or not. (Need to check Recursively)
+
+/******************************************************************************************************
+    Recursively Checks if the given file/directory is present in current working directory or not.    *
+*******************************************************************************************************/
 bool search(string filename, string path) {
     if(filename == "." || filename == "..") return true;
     struct dirent *de;
@@ -1119,21 +1200,31 @@ bool search(string filename, string path) {
     return 0;
 }
 
-// Create File
+
+/******************************************
+    Create a single File                  *
+*******************************************/
 bool createFile(string dirname, string pathname) {
     string _file = pathname + dirname;
     if(creat(_file.c_str() , S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH) < 0) return false;
     return true;
 }
 
-// Create Directory
+
+/******************************************
+    Create Single Directory (Folder)      *
+*******************************************/
 bool createDirectory(string dirname, string pathname) {
     string _dir = pathname + dirname;
     if(mkdir(_dir.c_str() , S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) < 0) return false;
     return true;
 }
 
-// Create Directory in Destination Path recursively with same Permission as Source.
+
+/***********************************************************
+    Copy the directory Recursively to Destination Path.    *
+    Permission and Ownership will remains intact.          *
+************************************************************/
 bool copyDirectory(string directorySourcePath, string directoryDestinationPath) {
 
     if(directorySourcePath == "/") return false;
@@ -1181,7 +1272,10 @@ bool copyDirectory(string directorySourcePath, string directoryDestinationPath) 
     return true;   
 }
 
-// Copy File
+
+/************************************************************
+    Copy Single File.(With same permission & Ownership)     *
+*************************************************************/
 bool copyFile(string fileSourcePath, string fileDestinationPath) {
     if(fileSourcePath == fileDestinationPath) return true;
     int nread;
@@ -1207,6 +1301,10 @@ bool copyFile(string fileSourcePath, string fileDestinationPath) {
     return true;
 }
 
+
+/******************************************
+    Deletes a single File.                *
+*******************************************/
 // Remove File
 bool removeFile(string pathname) {
     if(pathname[pathname.size() - 1] == '/') pathname = pathname.substr(0, pathname.size()-1);
@@ -1214,13 +1312,19 @@ bool removeFile(string pathname) {
     return true;
 }
 
-// Remove Directory
+
+/*************************************************
+    Deletes a single Directory (Empty Folder).   *
+**************************************************/
 bool removeDirectory(string pathname) {
     if(rmdir(pathname.c_str()) < 0) return false;
     return true;
 }
 
-// Delete Directory recursively.
+
+/******************************************
+    Delete Directory recursively.         *
+*******************************************/
 bool deleteDirectory(string directoryPath) {
 
     if(directoryPath == "/") return false;
@@ -1254,7 +1358,10 @@ bool deleteDirectory(string directoryPath) {
     return true;   
 }
 
-// Rename File
+
+/******************************************
+    Rename any File or Folder.            *
+*******************************************/
 bool renameFileOrDirectory(string path1, string path2) {
     if(path1[path1.size() - 1] == '/') path1 = path1.substr(0, path1.size()-1);
     if(path2[path2.size() - 1] == '/') path2 = path2.substr(0, path2.size()-1);
@@ -1262,3 +1369,6 @@ bool renameFileOrDirectory(string path1, string path2) {
     if(rename(path1.c_str(), path2.c_str()) < 0) return false;
     return true;
 }
+
+
+/************************END OF PROGRAMME**************************************/
